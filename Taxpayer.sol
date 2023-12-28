@@ -17,11 +17,9 @@ contract Taxpayer {
     uint tax_allowance;
 
     uint income;
-    bool public pippo;
 
     constructor(address p1, address p2) {
         age = 0;
-        pippo = true;
         isMarried = false;
         partner1 = p1;
         partner2 = p2;
@@ -30,7 +28,6 @@ contract Taxpayer {
         tax_allowance = DEFAULT_ALLOWANCE;
     }
 
-    // We require new_spouse != address(0);
     function marry(address new_spouse) public {
         require(getSpouse() == address(0), "You're already married");
         require(new_spouse != address(0), "Invalid spouse address");
