@@ -68,27 +68,32 @@ contract Taxpayer {
     //     invariantTaxAllowanceAge();
     // }
 
-    function marry(address newSpouse) public {
-        require(newSpouse!=address(this),"You cannot marry with yourself");
-        require(newSpouse != spouse, "Already married to this spouse");
+    function marry(address new_spouse) public {
+        require(new_spouse!=address(this),"You cannot marry with yourself");
+        require(new_spouse != spouse, "Already married to this spouse");
         require(spouse == address(0) && !isMarried, "Already married");
-        require(newSpouse != address(0), "Invalid spouse address");
-        Taxpayer sp = Taxpayer(address(newSpouse));
+        require(new_spouse != address(0), "Invalid spouse address");
+        Taxpayer sp = Taxpayer(address(new_spouse));
         require(
-            address(sp).code.length > 0,
+            address(sp).code.length >0,
             "Invalid spouse, is it already born?"
         );
         require(
             sp.getSpouse() == address(0) || sp.getSpouse() == address(this),
             "Your partner should be single or not married with another person"
         );
-        spouse = newSpouse;
-        // if (sp.getSpouse() == address(0)) {
-        //     sp.marry(address(this));
-        // }
+        spouse = new_spouse;
         isMarried = true;
     }
 
+    function divorce() public {
+        require(spouse != address(0),"You're not already married");
+        Taxpayer sp = Taxpayer(address(spouse));
+        sp.setSpouse(address(0));
+        spouse = address(0);
+        isMarried = false;
+    }
+    
     function setSpouse(address sp) public {
         require(sp!=address(this),"You cannot call setSpouse with yourself");
         bool want_to_divorce = sp==address(0);
@@ -99,14 +104,7 @@ contract Taxpayer {
         spouse = (address(sp));
     }
 
-    function divorce() public {
-        require(getSpouse() != address(0), "Not married");
-        Taxpayer sp = Taxpayer(address(spouse));
-        spouse = address(0);
-        sp.divorce();
-        isMarried = false;
-    }
-
+ 
     /* Transfer part of tax allowance to own spouse */
     function transferAllowance(uint256 change) public {
         require(isMarried, "Not married");
