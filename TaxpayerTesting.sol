@@ -4,20 +4,32 @@ pragma solidity ^0.8.22;
 import "./Taxpayer.sol"; // Replace with the actual path to your contract
 
 contract TaxpayerTesting is Taxpayer {
-    Taxpayer bravo;
+    constructor() Taxpayer(address(0), address(0)) {
+        for (int i = 0; i < 20; i++) {
+            haveBirthday();
+        }
+    }
 
-    constructor() Taxpayer(address(0), address(0)) {}
+    function spawn_a_person(bool adult) internal returns (Taxpayer) {
+        Taxpayer bravo = new Taxpayer(address(0), address(0));
+        if (adult) {
+            for (int i = 0; i < 20; i++) {
+                bravo.haveBirthday();
+            }
+        }
+        return bravo;
+    }
 
-    function echidna_test_one_way_marriage() public returns (bool) {
-        bravo = new Taxpayer(address(0), address(0));
+    function echidna_one_way_marriage() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
         this.marry(address(bravo));
         bool this_to_bravo = this.getSpouse() == address(bravo) &&
             this.getSpouse() != address(0);
         return this_to_bravo;
     }
 
-    function echidna_test_both_married() public returns (bool) {
-        bravo = new Taxpayer(address(0), address(0));
+    function echidna_both_married() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
         this.marry(address(bravo));
         bravo.marry(address(this));
         bool this_to_bravo = this.getSpouse() == address(bravo) &&
@@ -27,8 +39,8 @@ contract TaxpayerTesting is Taxpayer {
         return this_to_bravo && bravo_to_this;
     }
 
-    function echidna_test_divorce() public returns (bool) {
-        bravo = new Taxpayer(address(0), address(0));
+    function echidna_divorce() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
         this.marry(address(bravo));
         bravo.marry(address(this));
         bravo.divorce();
@@ -37,11 +49,57 @@ contract TaxpayerTesting is Taxpayer {
         return this_divorced && bravo_divorced;
     }
 
+    function echidna_block_spawn_of_orphan() public returns (bool) {
+        try new Taxpayer(address(1), address(2)) returns (Taxpayer) {
+            return false;
+        } catch {
+            return true;
+        }
+    }
+
     // Echidna test to check age increment
-    function echidna_test_have_birthday() public returns (bool) {
+    function echidna_have_birthday() public returns (bool) {
         uint initialAge = this.age();
         this.haveBirthday();
         require(this.age() == initialAge + 1, "Failed to increment age");
         return this.age() == initialAge + 1;
+    }
+
+    function echidna_cannot_marry_until_sixteen() public returns (bool) {
+        Taxpayer delta = spawn_a_person(false);
+        this.marry(address(delta));
+        try delta.marry(address(this)) {
+            return false;
+        } catch {
+            for (int i = 1; i < 16; i++) {
+                delta.haveBirthday();
+            }
+            return this.getSpouse() == address(delta);
+        }
+    }
+
+    function echidna_cannot_divorce_if_tax_pooling() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
+        this.marry(address(bravo));
+        bravo.marry(address(this));
+        uint256 TAX_ALLOWANCE_TRANFERRED = 500;
+        this.transferAllowance(TAX_ALLOWANCE_TRANFERRED);
+        try this.divorce() {
+            return false;
+        } catch {
+            bravo.transferAllowance(TAX_ALLOWANCE_TRANFERRED);
+            return this.getTaxAllowance() == DEFAULT_ALLOWANCE;
+        }
+    }
+
+    function echidna_transferallowance() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
+        this.marry(address(bravo));
+        bravo.marry(address(this));
+        this.transferAllowance(400);
+
+        return
+            bravo.getTaxAllowance() + this.getTaxAllowance() ==
+            2 * DEFAULT_ALLOWANCE;
     }
 }

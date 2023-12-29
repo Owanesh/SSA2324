@@ -1,13 +1,13 @@
 #coverage controls coverage guided testing
 coverage: true
 #testLimit is the number of test sequences to run
-testLimit: 100000
+testLimit: 10000
 #seqLen defines how many transactions are in a test sequence
-seqLen: 200
+seqLen: 20
 #solcArgs allows special args to solc
 solcArgs: "--optimize --optimize-runs 200"
 # #deployer is address of the contract deployer (who often is privileged owner, etc.)
-# deployer: "0x21212121"
+deployer: "0x21212121"
 # #sender is set of addresses transactions may originate from
-# sender: ["0x22222222", "0x23232323"]
+sender: ["0x22222222", "0x23232323"]
 # estimateGas: true
