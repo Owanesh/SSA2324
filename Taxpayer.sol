@@ -2,27 +2,27 @@
 pragma solidity ^0.8.22;
 
 contract Taxpayer {
-    uint public age;
+    uint256 public age;
 
     bool isMarried;
     /* Reference to spouse if person is married, address(0) otherwise */
     address spouse;
-    address partner1;
-    address partner2;
+    address parent1;
+    address parent2;
     /* Constant default income tax allowance */
-    uint constant DEFAULT_ALLOWANCE = 5000;
+    uint256 constant DEFAULT_ALLOWANCE = 5000;
     /* Constant income tax allowance for Older Taxpayers over 65 */
-    uint constant ALLOWANCE_OAP = 7000;
+    uint256 constant ALLOWANCE_OAP = 7000;
     /* Income tax allowance */
-    uint tax_allowance;
+    uint256 tax_allowance;
 
-    uint income;
+    uint256 income;
 
     constructor(address p1, address p2) {
         age = 0;
         isMarried = false;
-        partner1 = p1;
-        partner2 = p2;
+        parent1 = p1;
+        parent2 = p2;
         spouse = (address(0));
         income = 0;
         tax_allowance = DEFAULT_ALLOWANCE;
@@ -31,94 +31,84 @@ contract Taxpayer {
     // Invariants are conditions that must always be true at the end of any function execution within the contract
     // Invariant 1: If person x is married to person y, then person y should also be married to person x.
     // Invariant 2: If person x is married, then the spouse's reference should point back to person x.
-    function invariantMarriage() internal view returns (bool) {
-        if (isMarried && getSpouse() != address(0)) {
-            Taxpayer sp = Taxpayer(address(getSpouse()));
-            return (sp.getSpouse() == address(this));
-        }
-        return true;
-    }
+    // function invariantMarriage() internal view returns (bool) {
+    //     if (isMarried && getSpouse() != address(0)) {
+    //         Taxpayer sp = Taxpayer(address(getSpouse()));
+    //         return (sp.getSpouse() == address(this));
+    //     }
+    //     return true;
+    // }
 
-    function invariantPartners() internal view returns (bool) {
-        if (isMarried && getSpouse() != address(0)) {
-            Taxpayer p1 = Taxpayer(address(partner1));
-            Taxpayer p2 = Taxpayer(address(partner2));
-            require(
-                p1.getSpouse() != address(0) && p2.getSpouse() != address(0),
-                "Both partners should be married"
-            );
-        }
-        return true;
-    }
+    // function invariantTaxAllowance() internal view returns (bool) {
+    //     return tax_allowance >= 0;
+    // }
 
-    function invariantTaxAllowance() internal view returns (bool) {
-        return tax_allowance >= 0;
-    }
+    // function invariantTaxAllowanceAge() internal view returns (bool) {
+    //     if (age >= 65) {
+    //         return tax_allowance == ALLOWANCE_OAP;
+    //     }
+    //     return true; // No violation if age < 65
+    // }
 
-    function invariantTaxAllowanceAge() internal view returns (bool) {
-        if (age >= 65) {
-            return tax_allowance == ALLOWANCE_OAP;
-        }
-        return true; // No violation if age < 65
-    }
+    // function invariantSumTaxAllowances() internal view returns (bool) {
+    //     if (isMarried) {
+    //         Taxpayer spouseContract = Taxpayer(address(spouse));
+    //         return
+    //             tax_allowance + spouseContract.getTaxAllowance() ==
+    //             DEFAULT_ALLOWANCE;
+    //     }
+    //     return true; // No violation if not married
+    // }
 
-    function invariantSumTaxAllowances() internal view returns (bool) {
-        if (isMarried) {
-            Taxpayer spouseContract = Taxpayer(address(spouse));
-            return
-                tax_allowance + spouseContract.getTaxAllowance() ==
-                DEFAULT_ALLOWANCE;
-        }
-        return true; // No violation if not married
-    }
+    // modifier invariants() {
+    //     _; // do the normal code, then execute my variants
+    //     invariantMarriage();
+    //     invariantTaxAllowance();
+    //     invariantSumTaxAllowances();
+    //     invariantTaxAllowanceAge();
+    // }
 
-    modifier invariants() {
-        _; // do the normal code, then execute my variants
-        invariantMarriage();
-        invariantPartners();
-        invariantTaxAllowance();
-        invariantSumTaxAllowances();
-        invariantTaxAllowanceAge();
-    }
-
-    function marry(address new_spouse) public returns (bool) {
+    function marry(address newSpouse) public {
+        require(newSpouse!=address(this),"You cannot marry with yourself");
+        require(newSpouse != spouse, "Already married to this spouse");
+        require(spouse == address(0) && !isMarried, "Already married");
+        require(newSpouse != address(0), "Invalid spouse address");
+        Taxpayer sp = Taxpayer(address(newSpouse));
         require(
-            new_spouse != getSpouse(),
-            "We know your love, but you're already married with this spouse"
+            address(sp).code.length > 0,
+            "Invalid spouse, is it already born?"
         );
         require(
-            getSpouse() == address(0) && !isMarried,
-            "You're already married"
+            sp.getSpouse() == address(0) || sp.getSpouse() == address(this),
+            "Your partner should be single or not married with another person"
         );
-        require(new_spouse != address(0), "Invalid spouse address");
-        setSpouse(address(new_spouse));
-        // i prefer to use setter instead of direct assignation, it's safer
-        Taxpayer nspouse = Taxpayer(address(getSpouse()));
-
-        nspouse.marry(address(this)); // TODO: fix this line
+        spouse = newSpouse;
+        // if (sp.getSpouse() == address(0)) {
+        //     sp.marry(address(this));
+        // }
         isMarried = true;
-        return isMarried;
     }
 
-    function setSpouse(address sp) public invariants {
+    function setSpouse(address sp) public {
+        require(sp!=address(this),"You cannot call setSpouse with yourself");
+        bool want_to_divorce = sp==address(0);
         require(
-            (isMarried && sp == address(0)) ||
-                (!isMarried && getSpouse() == address(0)),
+            (isMarried && want_to_divorce),
             "You are already married, you can call this function only for divorce purpose now"
         );
         spouse = (address(sp));
     }
 
-    function divorce() public invariants {
+    function divorce() public {
         require(getSpouse() != address(0), "Not married");
         Taxpayer sp = Taxpayer(address(spouse));
+        spouse = address(0);
         sp.divorce();
         isMarried = false;
-        setSpouse((address(0)));
     }
 
     /* Transfer part of tax allowance to own spouse */
-    function transferAllowance(uint change) public invariants {
+    function transferAllowance(uint256 change) public {
         require(isMarried, "Not married");
         require(tax_allowance >= change, "Insufficient tax allowance");
         tax_allowance -= change;
@@ -126,7 +116,7 @@ contract Taxpayer {
         sp.setTaxAllowance(sp.getTaxAllowance() + change);
     }
 
-    function haveBirthday() public invariants {
+    function haveBirthday() public {
         age++;
     }
 
@@ -134,11 +124,11 @@ contract Taxpayer {
         return spouse;
     }
 
-    function setTaxAllowance(uint ta) public invariants {
+    function setTaxAllowance(uint256 ta) public {
         tax_allowance = ta;
     }
 
-    function getTaxAllowance() public view returns (uint) {
+    function getTaxAllowance() public view returns (uint256) {
         return tax_allowance;
     }
 }

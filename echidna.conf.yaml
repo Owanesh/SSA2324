@@ -1,7 +1,7 @@
 #coverage controls coverage guided testing
 coverage: true
 #testLimit is the number of test sequences to run
-testLimit: 1000
+testLimit: 100000
 #seqLen defines how many transactions are in a test sequence
 seqLen: 200
 #solcArgs allows special args to solc
