@@ -1,0 +1,19 @@
+name: Echidna
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Echidna Action
+      uses: crytic/echidna-action@v2
+      with:
+        files: .
+        contract: TaxpayerTesting
+        solc-version: 0.8.22
+        config: echidna.conf.yaml
+
