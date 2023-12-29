@@ -34,6 +34,10 @@ contract Taxpayer {
 
     function marry(address new_spouse) public {
         require(age > 16, "You must have at least 16 years old");
+        require(
+            new_spouse != address(parent1) && new_spouse != address(parent2),
+            "You cannoy marry with your parents"
+        ); // marriage with siblings is allowed by code
         require(new_spouse != address(this), "You cannot marry with yourself");
         require(new_spouse != spouse, "Already married to this spouse");
         require(spouse == address(0) && !isMarried, "Already married");
@@ -138,13 +142,11 @@ contract Taxpayer {
     }
 
     function haveBirthday() public {
-        if(age==64)tax_allowance+=(ALLOWANCE_OAP-DEFAULT_ALLOWANCE); // added line
         age++;
+        if (age == 65) tax_allowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added line
     }
 
     function getSpouse() public view returns (address) {
         return spouse;
     }
-
-     
 }

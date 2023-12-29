@@ -10,14 +10,58 @@ contract TaxpayerTesting is Taxpayer {
         }
     }
 
+    function be_adult(Taxpayer tp) internal returns (Taxpayer) {
+        for (int i = 0; i < 18; i++) {
+            tp.haveBirthday();
+        }
+        return tp;
+    }
+
     function spawn_a_person(bool adult) internal returns (Taxpayer) {
         Taxpayer bravo = new Taxpayer(address(0), address(0));
         if (adult) {
-            for (int i = 0; i < 20; i++) {
-                bravo.haveBirthday();
-            }
+            bravo = be_adult(bravo);
         }
         return bravo;
+    }
+
+    function marry_two_person(Taxpayer p1, Taxpayer p2) internal {
+        require(
+            p1.age() > 16 && p2.age() > 16,
+            "To get married you must have at least 16 years old"
+        );
+        p1.marry(address(p2));
+        p2.marry(address(p1));
+    }
+
+    function echidna_couple_make_a_baby() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
+        marry_two_person(bravo, this);
+        try new Taxpayer(address(this), address(bravo)) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    function echidna_couple_make_a_baby_and_this_wants_marry_parents()
+        public
+        returns (bool)
+    {
+        Taxpayer bravo = spawn_a_person(true);
+        marry_two_person(bravo, this);
+        try new Taxpayer(address(this), address(bravo)) returns (
+            Taxpayer result
+        ) {
+            result = be_adult(result);
+            try result.marry(address(bravo)) {
+                return false;
+            } catch {
+                return true;
+            }
+        } catch {
+            return false;
+        }
     }
 
     function echidna_one_way_marriage() public returns (bool) {
@@ -57,7 +101,6 @@ contract TaxpayerTesting is Taxpayer {
         }
     }
 
-    // Echidna test to check age increment
     function echidna_have_birthday() public returns (bool) {
         uint initialAge = this.age();
         this.haveBirthday();
@@ -97,7 +140,6 @@ contract TaxpayerTesting is Taxpayer {
         this.marry(address(bravo));
         bravo.marry(address(this));
         this.transferAllowance(400);
-
         return
             bravo.getTaxAllowance() + this.getTaxAllowance() ==
             2 * DEFAULT_ALLOWANCE;
