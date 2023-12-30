@@ -2,7 +2,7 @@
 pragma solidity ^0.8.22;
 
 contract Taxpayer {
-    uint256 public age;
+    uint256 age;
     bool isMarried;
     /* Reference to spouse if person is married, address(0) otherwise */
     address spouse;
@@ -66,14 +66,17 @@ contract Taxpayer {
             (getTaxAllowance() == DEFAULT_ALLOWANCE && age < 65) ||
                 (getTaxAllowance() == ALLOWANCE_OAP && age >= 65),
             "Before divorcing, fix your tax pool allowance"
-        );
+        ); // todo: fix that someone marries one at 64yo.
+        /**
+            if(getAge()>=65) {setTaxAllowance(ALLOWANCE_OAP);}
+            else {setTaxAllowance(DEFAULT_ALLOWANCE);}
+         */
         sp.setSpouse(address(0));
         spouse = address(0);
+        /*
+        sp.divorce(); // instead of sp.setSpouse(address(0));
+        */
         isMarried = false;
-        // We should ensure that sp.isMarried become false
-        // alpha.marry(bravo)
-        // alpha.divorce() :: sets null on both
-        // bravo.divorce() :: overrides alpha spouse -- what if alpha in the meanwhile has married another person?
     }
 
     function setSpouse(address sp) public {
@@ -104,13 +107,13 @@ contract Taxpayer {
         require(
             ((sp.getTaxAllowance() + getTaxAllowance()) ==
                 (2 * DEFAULT_ALLOWANCE) &&
-                (age < 65 && sp.age() < 65)) ||
+                (getAge() < 65 && sp.getAge() < 65)) ||
                 ((sp.getTaxAllowance() + getTaxAllowance()) ==
                     (2 * ALLOWANCE_OAP) &&
-                    (age >= 65 && sp.age() >= 65)) ||
+                    (getAge() >= 65 && sp.getAge() >= 65)) ||
                 ((sp.getTaxAllowance() + getTaxAllowance()) ==
                     (DEFAULT_ALLOWANCE + ALLOWANCE_OAP) &&
-                    (age >= 65 || sp.age() >= 65)),
+                    (getAge() >= 65 || sp.getAge() >= 65)),
             "Someone tries to decrease illegally your tax allowance"
         );
     }
@@ -129,9 +132,9 @@ contract Taxpayer {
             "Someone tries to decrease illegally your tax allowance"
         );
         require(
-            ta <= 2 * DEFAULT_ALLOWANCE ||
-                ta <= 2 * ALLOWANCE_OAP ||
-                ta <= DEFAULT_ALLOWANCE + ALLOWANCE_OAP,
+            ta <= 2 * DEFAULT_ALLOWANCE && (getAge()<=65 && Taxpayer(address(getSpouse())).getAge()<=65)||
+                ta <= DEFAULT_ALLOWANCE + ALLOWANCE_OAP && (getAge()>=65|| Taxpayer(address(getSpouse())).getAge()>=65)||
+                ta <= 2 * ALLOWANCE_OAP && (getAge()>=65 && Taxpayer(address(getSpouse())).getAge()>=65),
             "Tax pooling violation"
         );
         tax_allowance = ta;
@@ -148,5 +151,9 @@ contract Taxpayer {
 
     function getSpouse() public view returns (address) {
         return spouse;
+    }
+
+    function getAge() public view returns (uint256){
+        return age;
     }
 }

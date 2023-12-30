@@ -17,6 +17,13 @@ contract TaxpayerTesting is Taxpayer {
         return tp;
     }
 
+    function be_old(Taxpayer tp) internal returns (Taxpayer) {
+        for (int i = 0; i < 80; i++) {
+            tp.haveBirthday();
+        }
+        return tp;
+    }
+
     function spawn_a_person(bool adult) internal returns (Taxpayer) {
         Taxpayer bravo = new Taxpayer(address(0), address(0));
         if (adult) {
@@ -27,7 +34,7 @@ contract TaxpayerTesting is Taxpayer {
 
     function marry_two_person(Taxpayer p1, Taxpayer p2) internal {
         require(
-            p1.age() > 16 && p2.age() > 16,
+            p1.getAge() > 16 && p2.getAge() > 16,
             "To get married you must have at least 16 years old"
         );
         p1.marry(address(p2));
@@ -102,10 +109,10 @@ contract TaxpayerTesting is Taxpayer {
     }
 
     function echidna_have_birthday() public returns (bool) {
-        uint initialAge = this.age();
+        uint initialAge = this.getAge();
         this.haveBirthday();
-        require(this.age() == initialAge + 1, "Failed to increment age");
-        return this.age() == initialAge + 1;
+        require(this.getAge() == initialAge + 1, "Failed to increment age");
+        return this.getAge() == initialAge + 1;
     }
 
     function echidna_cannot_marry_until_sixteen() public returns (bool) {
@@ -123,8 +130,7 @@ contract TaxpayerTesting is Taxpayer {
 
     function echidna_cannot_divorce_if_tax_pooling() public returns (bool) {
         Taxpayer bravo = spawn_a_person(true);
-        this.marry(address(bravo));
-        bravo.marry(address(this));
+        marry_two_person(bravo, this);
         uint256 TAX_ALLOWANCE_TRANFERRED = 500;
         this.transferAllowance(TAX_ALLOWANCE_TRANFERRED);
         try this.divorce() {
@@ -135,13 +141,33 @@ contract TaxpayerTesting is Taxpayer {
         }
     }
 
+    function echidna_transfer_huge_amount_of_allowance() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
+        marry_two_person(bravo, this);
+        try this.transferAllowance(40000){
+            return false;
+        }catch{
+            return true;
+        }
+    }
+
     function echidna_transferallowance() public returns (bool) {
         Taxpayer bravo = spawn_a_person(true);
-        this.marry(address(bravo));
-        bravo.marry(address(this));
-        this.transferAllowance(400);
+        marry_two_person(bravo, this);
+        this.transferAllowance(4000);
         return
             bravo.getTaxAllowance() + this.getTaxAllowance() ==
             2 * DEFAULT_ALLOWANCE;
+    }
+
+
+    function echidna_allowance_older_than_sixtyfive() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
+        marry_two_person(bravo, this);
+        bravo = be_old(bravo);
+        this.transferAllowance(2000);
+        return
+            bravo.getTaxAllowance() + this.getTaxAllowance() ==
+            DEFAULT_ALLOWANCE+ALLOWANCE_OAP;
     }
 }
