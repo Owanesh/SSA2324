@@ -78,8 +78,8 @@ contract Taxpayer {
         require(
             (getTaxAllowance() == DEFAULT_ALLOWANCE && age < 65) ||
                 ((getTaxAllowance() == ALLOWANCE_OAP && age >= 65) &&
-                    (sp.getTaxAllowance() == DEFAULT_ALLOWANCE && age < 65)) ||
-                (sp.getTaxAllowance() == ALLOWANCE_OAP && age >= 65),
+                    (sp.getTaxAllowance() == DEFAULT_ALLOWANCE && sp.getAge() < 65)) ||
+                (sp.getTaxAllowance() == ALLOWANCE_OAP && sp.getAge() >= 65),
             "Before divorcing, fix your tax pool allowance"
         ); 
         /**
