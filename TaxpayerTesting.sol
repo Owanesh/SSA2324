@@ -160,8 +160,18 @@ contract TaxpayerTesting is Taxpayer {
             2 * DEFAULT_ALLOWANCE;
     }
 
+ function echidna_allowance_older_than_sixtyfive_for_both() public returns (bool) {
+        Taxpayer bravo = spawn_a_person(true);
+        marry_two_person(bravo, this);
+        bravo = be_old(bravo);
+        be_old(this);
+        this.transferAllowance(2000);
+        return
+            bravo.getTaxAllowance() + this.getTaxAllowance() ==
+            ALLOWANCE_OAP+ALLOWANCE_OAP;
+    }
 
-    function echidna_allowance_older_than_sixtyfive() public returns (bool) {
+    function echidna_allowance_older_than_sixtyfive_for_only_one() public returns (bool) {
         Taxpayer bravo = spawn_a_person(true);
         marry_two_person(bravo, this);
         bravo = be_old(bravo);

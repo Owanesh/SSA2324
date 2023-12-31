@@ -32,6 +32,11 @@ contract Taxpayer {
         tax_allowance = DEFAULT_ALLOWANCE;
     }
 
+    // function wrap_marry(address new_spouse) public {
+    //     this.marry(new_spouse);
+    //     Taxpayer(address(new_spouse)).marry(address(this));
+    // }
+
     function marry(address new_spouse) public {
         require(age > 16, "You must have at least 16 years old");
         require(
@@ -39,16 +44,21 @@ contract Taxpayer {
             "You cannoy marry with your parents"
         ); // marriage with siblings is allowed by code
         require(new_spouse != address(this), "You cannot marry with yourself");
-        require(new_spouse != spouse, "Already married to this spouse");
-        require(spouse == address(0) && !isMarried, "Already married");
+        require(new_spouse != getSpouse(), "Already married to this spouse");
+        require(
+            spouse == address(0) && getIsMarried() == false,
+            "Already married"
+        );
         require(new_spouse != address(0), "Invalid spouse address");
         require(
             address(Taxpayer(address(new_spouse))).code.length > 0,
             "Invalid spouse, is it already born?" //exploitable if new_spouse has another type of contract
         );
         require(
-            Taxpayer(address(new_spouse)).getSpouse() == address(0) ||
-                Taxpayer(address(new_spouse)).getSpouse() == address(this),
+            (Taxpayer(address(new_spouse)).getSpouse() == address(0) &&
+                Taxpayer(address(new_spouse)).getIsMarried() == false) ||
+                (Taxpayer(address(new_spouse)).getIsMarried() == true &&
+                    Taxpayer(address(new_spouse)).getSpouse() == address(this)),
             "Your partner should be single or not married with another person"
         );
         spouse = new_spouse;
@@ -56,17 +66,22 @@ contract Taxpayer {
     }
 
     function divorce() public {
-        require(getSpouse() != address(0), "You're not already married");
+        require(
+            getSpouse() != address(0) && getIsMarried(),
+            "You're not already married"
+        );
         Taxpayer sp = Taxpayer(address(spouse));
         require(
-            sp.getSpouse() == address(this) && getSpouse() == address(sp),
+            sp.getSpouse() == address(this) && sp.getIsMarried(),
             "That person isn't married with you"
         );
         require(
             (getTaxAllowance() == DEFAULT_ALLOWANCE && age < 65) ||
-                (getTaxAllowance() == ALLOWANCE_OAP && age >= 65),
+                ((getTaxAllowance() == ALLOWANCE_OAP && age >= 65) &&
+                    (sp.getTaxAllowance() == DEFAULT_ALLOWANCE && age < 65)) ||
+                (sp.getTaxAllowance() == ALLOWANCE_OAP && age >= 65),
             "Before divorcing, fix your tax pool allowance"
-        ); // todo: fix that someone marries one at 64yo.
+        ); 
         /**
             if(getAge()>=65) {setTaxAllowance(ALLOWANCE_OAP);}
             else {setTaxAllowance(DEFAULT_ALLOWANCE);}
@@ -78,12 +93,12 @@ contract Taxpayer {
         */
         isMarried = false;
     }
+ 
 
     function setSpouse(address sp) public {
         require(sp != address(this), "You cannot call setSpouse with yourself");
-        bool want_to_divorce = sp == address(0);
         require(
-            (isMarried && want_to_divorce),
+            (getSpouse() != address(0) && getIsMarried() && sp == address(0)),
             "You are already married, you can call this function only for divorce purpose now"
         );
         spouse = (address(sp));
@@ -96,26 +111,17 @@ contract Taxpayer {
             "Don't waste gas, save the world, use proper change value"
         );
         require(tax_allowance >= change, "Insufficient tax allowance");
+        require(
+            getIsMarried() && getSpouse() != address(0),
+            "You have to be married before pooling tax allowance"
+        );
         tax_allowance -= change;
         Taxpayer sp = Taxpayer(address(spouse));
         require(
-            sp.getSpouse() == address(this) && getSpouse() == address(sp),
+            sp.getSpouse() == address(this) && sp.getIsMarried(),
             "You cannot change allowance of person not married with you"
         );
         sp.setTaxAllowance(sp.getTaxAllowance() + change);
-
-        require(
-            ((sp.getTaxAllowance() + getTaxAllowance()) ==
-                (2 * DEFAULT_ALLOWANCE) &&
-                (getAge() < 65 && sp.getAge() < 65)) ||
-                ((sp.getTaxAllowance() + getTaxAllowance()) ==
-                    (2 * ALLOWANCE_OAP) &&
-                    (getAge() >= 65 && sp.getAge() >= 65)) ||
-                ((sp.getTaxAllowance() + getTaxAllowance()) ==
-                    (DEFAULT_ALLOWANCE + ALLOWANCE_OAP) &&
-                    (getAge() >= 65 || sp.getAge() >= 65)),
-            "Someone tries to decrease illegally your tax allowance"
-        );
     }
 
     function setTaxAllowance(uint256 ta) public {
@@ -131,10 +137,22 @@ contract Taxpayer {
             ta > getTaxAllowance(),
             "Someone tries to decrease illegally your tax allowance"
         );
+        Taxpayer spoused = Taxpayer(address(getSpouse()));
         require(
-            ta <= 2 * DEFAULT_ALLOWANCE && (getAge()<=65 && Taxpayer(address(getSpouse())).getAge()<=65)||
-                ta <= DEFAULT_ALLOWANCE + ALLOWANCE_OAP && (getAge()>=65|| Taxpayer(address(getSpouse())).getAge()>=65)||
-                ta <= 2 * ALLOWANCE_OAP && (getAge()>=65 && Taxpayer(address(getSpouse())).getAge()>=65),
+            ((getAge() < 65 &&
+                spoused.getAge() < 65 &&
+                ta + spoused.getTaxAllowance() == 2 * DEFAULT_ALLOWANCE) ||
+                (getAge() >= 65 &&
+                    spoused.getAge() >= 65 &&
+                    ta + spoused.getTaxAllowance() == 2 * ALLOWANCE_OAP) ||
+                (getAge() < 65 &&
+                    spoused.getAge() >= 65 &&
+                    ta + spoused.getTaxAllowance() ==
+                    DEFAULT_ALLOWANCE + ALLOWANCE_OAP) ||
+                (getAge() >= 65 &&
+                    spoused.getAge() < 65 &&
+                    ta + spoused.getTaxAllowance() ==
+                    DEFAULT_ALLOWANCE + ALLOWANCE_OAP)),
             "Tax pooling violation"
         );
         tax_allowance = ta;
@@ -146,14 +164,21 @@ contract Taxpayer {
 
     function haveBirthday() public {
         age++;
-        if (age == 65) tax_allowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added line
+        if (age == 65 && !getIsMarried()) 
+            tax_allowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added lines
+        else if (age == 65 && getIsMarried()) 
+            this.setTaxAllowance(this.getTaxAllowance()+(ALLOWANCE_OAP - DEFAULT_ALLOWANCE));
     }
 
     function getSpouse() public view returns (address) {
         return spouse;
     }
-
-    function getAge() public view returns (uint256){
+    // added getter functions for code security improvements
+    function getAge() public view returns (uint256) {
         return age;
+    }
+
+    function getIsMarried() public view returns (bool) {
+        return isMarried;
     }
 }
