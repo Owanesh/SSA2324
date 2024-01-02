@@ -1,3 +1,7 @@
 bin/
 .vscode/
 crytic-export/
+report/*
+!report/report.tex
+!report/mythril.report
+.solcx-lock-0.8.22
