@@ -4,21 +4,23 @@ pragma solidity ^0.8.22;
 import "./Taxpayer.sol"; // Replace with the actual path to your contract
 
 contract TaxpayerTesting is Taxpayer {
+    uint constant ADULT_AGE = 18;
+    uint constant ADULT_OLD_AGE = 65;
     constructor() Taxpayer(address(0), address(0)) {
-        for (int i = 0; i < 18; i++) {
+        for (uint i = 0; i < ADULT_AGE; i++) {
             haveBirthday();
         }
     }
 
     function be_adult(Taxpayer tp) internal returns (Taxpayer) {
-        for (int i = 0; i < 18; i++) {
+        for (uint i = 0; i < ADULT_AGE; i++) {
             tp.haveBirthday();
         }
         return tp;
     }
 
     function be_old(Taxpayer tp) internal returns (Taxpayer) {
-        for (int i = 0; i < 80; i++) {
+        for (uint i = 0; i < ADULT_OLD_AGE; i++) {
             tp.haveBirthday();
         }
         return tp;
@@ -108,11 +110,9 @@ contract TaxpayerTesting is Taxpayer {
         }
     }
 
-    function echidna_have_birthday() public returns (bool) {
-        uint initialAge = this.getAge();
-        this.haveBirthday();
-        require(this.getAge() == initialAge + 1, "Failed to increment age");
-        return this.getAge() == initialAge + 1;
+    function echidna_have_birthday() public view returns (bool) {
+        require(this.getAge() == ADULT_OLD_AGE, "Failed to spawn as adult");
+        return this.getAge() == ADULT_AGE;
     }
 
     function echidna_cannot_marry_until_sixteen() public returns (bool) {
