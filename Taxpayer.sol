@@ -13,7 +13,7 @@ contract Taxpayer {
     /* Constant income tax allowance for Older Taxpayers over 65 */
     uint256 constant ALLOWANCE_OAP = 7000;
     /* Income tax allowance */
-    uint256 tax_allowance;
+    uint256 taxAllowance;
     uint256 income;
 
     constructor(address p1, address p2) {
@@ -29,7 +29,7 @@ contract Taxpayer {
         parent2 = p2;
         spouse = (address(0));
         income = 0;
-        tax_allowance = DEFAULT_ALLOWANCE;
+        taxAllowance = DEFAULT_ALLOWANCE;
     }
 
     // function wrap_marry(address new_spouse) public {
@@ -37,31 +37,31 @@ contract Taxpayer {
     //     Taxpayer(address(new_spouse)).marry(address(this));
     // }
 
-    function marry(address new_spouse) public {
+    function marry(address newSpouse) public {
         require(age > 16, "You must have at least 16 years old");
         require(
-            new_spouse != address(parent1) && new_spouse != address(parent2),
+            newSpouse != address(parent1) && newSpouse != address(parent2),
             "You cannoy marry with your parents"
         ); // marriage with siblings is allowed by code
-        require(new_spouse != address(this), "You cannot marry with yourself");
-        require(new_spouse != getSpouse(), "Already married to this spouse");
+        require(newSpouse != address(this), "You cannot marry with yourself");
+        require(newSpouse != getSpouse(), "Already married to this spouse");
         require(
             spouse == address(0) && getIsMarried() == false,
             "Already married"
         );
-        require(new_spouse != address(0), "Invalid spouse address");
+        require(newSpouse != address(0), "Invalid spouse address");
         require(
-            address(Taxpayer(address(new_spouse))).code.length > 0,
+            address(Taxpayer(address(newSpouse))).code.length > 0,
             "Invalid spouse, is it already born?" //exploitable if new_spouse has another type of contract
         );
         require(
-            (Taxpayer(address(new_spouse)).getSpouse() == address(0) &&
-                Taxpayer(address(new_spouse)).getIsMarried() == false) ||
-                (Taxpayer(address(new_spouse)).getIsMarried() == true &&
-                    Taxpayer(address(new_spouse)).getSpouse() == address(this)),
+            (Taxpayer(address(newSpouse)).getSpouse() == address(0) &&
+                Taxpayer(address(newSpouse)).getIsMarried() == false) ||
+                (Taxpayer(address(newSpouse)).getIsMarried() == true &&
+                    Taxpayer(address(newSpouse)).getSpouse() == address(this)),
             "Your partner should be single or not married with another person"
         );
-        spouse = new_spouse;
+        spouse = newSpouse;
         isMarried = true;
     }
 
@@ -110,12 +110,12 @@ contract Taxpayer {
             change > 0,
             "Don't waste gas, save the world, use proper change value"
         );
-        require(tax_allowance >= change, "Insufficient tax allowance");
+        require(taxAllowance >= change, "Insufficient tax allowance");
         require(
             getIsMarried() && getSpouse() != address(0),
             "You have to be married before pooling tax allowance"
         );
-        tax_allowance -= change;
+        taxAllowance -= change;
         Taxpayer sp = Taxpayer(address(spouse));
         require(
             sp.getSpouse() == address(this) && sp.getIsMarried(),
@@ -155,17 +155,17 @@ contract Taxpayer {
                     DEFAULT_ALLOWANCE + ALLOWANCE_OAP)),
             "Tax pooling violation"
         );
-        tax_allowance = ta;
+        taxAllowance = ta;
     }
 
     function getTaxAllowance() public view returns (uint256) {
-        return tax_allowance;
+        return taxAllowance;
     }
 
     function haveBirthday() public {
         age++;
         if (age == 65 && !getIsMarried()) 
-            tax_allowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added lines
+            taxAllowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added lines
         else if (age == 65 && getIsMarried()) 
             this.setTaxAllowance(this.getTaxAllowance()+(ALLOWANCE_OAP - DEFAULT_ALLOWANCE));
     }
