@@ -63,6 +63,8 @@ contract Taxpayer {
         );
         spouse = newSpouse;
         isMarried = true;
+        // if(!Taxpayer(address(newSpouse)).getIsMarried())
+        //    Taxpayer(address(newSpouse)).marry(address(this));
     }
 
     function divorce() public {

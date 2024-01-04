@@ -4,11 +4,16 @@
 \usepackage{titlesec}   % Customize section titles
 \usepackage{lipsum}      % Generate placeholder text
 \usepackage{biblatex}    % Handle bibliography
+\usepackage[skins,minted]{tcolorbox}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\hyphenation{exam-ple}
 
+\setminted{fontsize=\footnotesize}
 % Title and Author Information
-\title{SSA Assignment}
+\title{Security in Software Application Assignment}
 \author{Owanesh}
-\date{December 2023}
+\date{Jan 2024}
 
 % Define Section and Subsection Formatting
 \titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
@@ -22,28 +27,203 @@
 
 % Abstract
 \begin{abstract}
-    Brief summary of your report.
+    This report will analyze the security of a provided Taxpayer.sol 
+    contract. Security will be analyzed and tested through the use of 
+    the Echidna tool. To make the code more robust throughout the report 
+    only \mintinline{solidity}{require()} functions will be used to 
+    increase backward compatibility. Where there are lines of code with 
+    the exception of \mintinline{solidity}{require()}, this will be 
+    explained by demonstrating its usefulness based on the assumptions made.
+
+    This report is part of the Security in Software Application course at La Sapienza University of Rome. It is therefore not intended as a scientific research paper, but as a report for laboratory exercise.
 \end{abstract}
 
 % Table of Contents
-\tableofcontents
+% \tableofcontents
 
 % Sections
-\section{Introduction}
-    \lipsum[1]  % Replace with your introduction text.
+\section{Introduction to fuzz testing}
+Fuzz testing is a dynamic testing technique used to discover coding 
+errors and security loopholes in software, by inputting massive amounts 
+of random data, called fuzz, to the system in an attempt to make it crash. 
+This technique is especially effective in finding vulnerabilities in 
+software applications, including smart contracts like in this report.
 
-\section{Literature Review}
-    \lipsum[2]  % Replace with your literature review.
+In the context of smart contracts, other popular tool for 
+fuzz testing is Malticore and Foundry. Echidna is an Haskell program designed 
+for fuzzing/property-based testing of Ethereum smart contracts. 
+It uses sophisticated grammar-based fuzzing campaigns based 
+on a contract ABI\footnote{A contract ABI, or Application Binary Interface, in the context of Ethereum, is essentially a specification for how to interact with a contract on the Ethereum blockchain} to falsify user-defined predicates or Solidity assertions.
+Instead of other softwares, Echidna includes also other tools like slither.
+
+One of the key features of Echidna is its unique 'property-based fuzzing',
+ which tries to falsify user-defined invariants (properties) 
+ instead of looking for crashes like a traditional fuzzer. 
+ This makes it particularly effective at finding subtle vulnerabilities that might not be caught by other types of testing.
+
+This report focuses on the application of fuzz testing to 
+the Taxpayer.sol contract, a smart contract in the Ethereum blockchain. 
+The contract includes several ``require()'' statements, which are 
+conditions that must be met for the contract to execute correctly. 
+These conditions serve as the properties that Echidna will attempt to 
+falsify during the fuzz testing process.
+
+The goal of this report is to evaluate the effectiveness of Echidna 
+in identifying potential vulnerabilities in the Taxpayer.sol contract. 
+By examining how Echidna handles various edge cases and unconsidered 
+behaviors, we aim to contribute to the broader discussion on improving 
+the security of smart contracts.
+
+\section{Other testing tools}
+There are several tools available for conducting security checks on smart contracts, each designed to identify and mitigate potential vulnerabilities that could compromise the integrity and security of blockchain-based applications. Solidity static analyzers such as Myhtil and Slither\footnote{Already included into Echidna stack} are widely used to perform automated scans of smart contract code, flagging potential security issues. 
+\subsection{Mythril}
+Mythril is a powerful open-source security analysis tool specifically designed for Ethereum smart contracts. It performs static and dynamic analysis to detect a wide range of security issues, including potential vulnerabilities such as reentrancy attacks, integer overflows, and more.
+
+Mythril supports various installation methods, including pip (Python package manager) and Docker. 
+You can find detailed installation instructions on the official Mythril 
+GitHub repository: \texttt{\href{https://github.com/ConsenSys/mythril}{github.com/ConsenSys/mythril}}. 
+The method chosed in this report is via Docker due to compatibility with python3.12. 
+Below there are execution command and respective output given by tool.
+
+Before we look at what changes are needed to make the contract more secure and robust, let's take a look at what Mythril's report on the contract provided. (currently available as original.Taxpayer.sol)
+\begin{minted}{bash}
+$: docker run -v $(pwd):/tmp mythril/myth analyze /tmp/original.Taxpayer.sol
+\end{minted}
+\begin{minted}[breaklines]{bash}
+==== External Call To User-Supplied Address ====
+SWC ID: 107
+Severity: Low
+Contract: Taxpayer
+Function name: transferAllowance(uint256)
+PC address: 614
+Estimated Gas Usage: 10205 - 99568
+A call to a user-supplied address is executed.
+An external message call to an address specified by the caller is executed. Note that the callee account might contain arbitrary code and could re-enter any function within this contract. Reentering the contract in an intermediate state may lead to unexpected behaviour. Make sure that no state modifications are executed after this call and/or reentrancy guards are in place.
+--------------------
+In file: /tmp/original.Taxpayer.sol:56
+
+sp.getTaxAllowance()
+
+--------------------
+Caller: [CREATOR], function: marry(address), txdata: 0xbccb358e000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeef, decoded_data: ('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',), value: 0x0
+Caller: [ATTACKER], function: transferAllowance(uint256), txdata: 0x5f68c4390000000000000000000000000000000000000000000000000000000000001121, decoded_data: (4385,), value: 0x0
+\end{minted}
+and analog results are available also for
+\begin{minted}[breaklines]{bash}
+56.    sp.setTaxAllowance(sp.getTaxAllowance()+change)
+47.    sp.setSpouse(address(0))
+48.    spouse = address(0)
+\end{minted}
+As part of the security analysis conducted on the provided smart contract, Mythril revealed a number of functions that could have potential vulnerabilities. 
+The full report of this analysis is available in the attached Mythril.report file available on repository 
+(\texttt{\href{https://github.com/Owanesh/SSA2324/blob/main/report/mythril.report}{github.com/owanesh/SSA2324/blob/master/report\linebreak/mythril.report}}). 
+The findings highlight several areas of concern, including possible risks related to 
+reentrancy\footnote{Reentrancy vulnerability in smart contracts occurs when external calls can be reentered before completing the initial operation, potentially leading to unintended and malicious behavior.} (line 159 of report). 
+In addition, it should be noted that the synergic integration of Mythril with Echidna provided substantial support in defining the constraints (require) necessary to mitigate the identified vulnerabilities. The combination of these two powerful resources provides a comprehensive overview of contract security.
+At the end of listed enhancement described in this report, the result of Mythril is this reported below
+\begin{minted}[breaklines]{bash}
+    $: docker run -v $(pwd):/tmp mythril/myth analyze /tmp/Taxpayer.sol
+    >>> The analysis was completed successfully. No issues were detected.
+    $: docker run -v $(pwd):/tmp mythril/myth analyze /tmp/TaxpayerTesting.sol
+    >>> The analysis was completed successfully. No issues were detected.
+\end{minted}
+
+\section{Echidna setup}
+In order to write a full suite of tests, echidna offers two way o write a Tester contract. The first one represented below, is a test with a sort of whitelist on method which are allowed to be called.\footnote{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contract}
+Another method is by inheritance
+\begin{minted}[linenos,breaklines, firstnumber=1, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import "./Taxpayer.sol";
+
+contract TaxpayerTesting is Taxpayer {
+    uint constant ADULT_AGE = 18;
+    uint constant ADULT_OLD_AGE = 65;
+    Taxpayer alpha;
+    Taxpayer bravo;
+
+    constructor() Taxpayer(address(0), address(0)) {
+        alpha = new Taxpayer(address(0), address(0));
+        bravo = new Taxpayer(address(0), address(0));
+...
+\end{minted}
+By inheriting from Taxpayer, the testing contract gains access to all the public and external functions of Taxpayer, enabling comprehensive testing without the need for explicit method declarations in TaxpayerTesting. This approach can enhance the efficiency of testing, especially in scenarios where extensive coverage of the target contract's functionality is desired. Additionally, the second method seems to align with a fuzzer-based testing strategy, wherein automatic identification of public methods is crucial for generating diverse inputs during testing, as opposed to relying on a predefined whitelist. The decision to adopt the second method is likely driven by the desire for flexibility, automation, and a more dynamic testing environment.
+\section{If person x is married to person y, then person y should be married to person x}
+This function can be securely validated only through the proper execution of their respective marry functions. It is crucial that both marry functions are called accurately to maintain the consistency of marriage states. Therefore, the validation of this property is inherently tied to the accurate implementation and execution of the marry functions. An optimal implementation might involve code optimizations, ensuring that the marry function of one person correctly invokes the marry function of the spouse, thereby making the contract more robust and resilient to potential logic errors that could compromise the correctness of the application. 
+\begin{minted}{solidity}
+function marry(address newSpouse) public {
+    <all_require()_conditions>
+    spouse=newSpouse;
+    isMarried = true;
+    if(!Taxpayer(address(newSpouse)).getIsMarried())
+        Taxpayer(address(newSpouse)).marry(address(this));
+}
+\end{minted}
+
+\textit{In this way we achieve the isMarried status on both contract with one transaction.}
+
+The decision to not implement the marriage verification within the marry function could stem from the principle of separation of concerns and the idea that a contract should ideally modify only its own state. In a well-designed system, each contract should be responsible for managing its own data and logic independently
+\subsection{Analyze the original code}
+\begin{minted}[linenos, breaklines, firstnumber=40, label=original.Taxpayer.sol, labelposition=topline, frame=single]{solidity}
+    function marry(address new_spouse) public {
+        spouse = new_spouse;
+        isMarried = true;
+       }
+    \end{minted}
+\begin{minted}[linenos, breaklines, firstnumber=40, label=Taxpayer.sol, labelposition=topline, frame=single]{solidity}
+function marry(address newSpouse) public {
+    require(age > 16, "You must have at least 16 years old");
+    require(
+        newSpouse != address(parent1) && newSpouse != address(parent2),
+        "You cannoy marry with your parents"
+    ); // marriage with siblings is allowed by code
+    require(newSpouse != address(this), "You cannot marry with yourself");
+    require(newSpouse != getSpouse(), "Already married to this spouse");
+    require(
+        spouse == address(0) && getIsMarried() == false,
+        "Already married"
+    );
+    require(newSpouse != address(0), "Invalid spouse address");
+    require(
+        address(Taxpayer(address(newSpouse))).code.length > 0,
+        "Invalid spouse, is it already born?" //exploitable if new_spouse has another type of contract
+    );
+    require(
+        (Taxpayer(address(newSpouse)).getSpouse() == address(0) &&
+            Taxpayer(address(newSpouse)).getIsMarried() == false) ||
+            (Taxpayer(address(newSpouse)).getIsMarried() == true &&
+                Taxpayer(address(newSpouse)).getSpouse() == address(this)),
+        "Your partner should be single or not married with another person"
+    );
+    spouse = newSpouse;
+    isMarried = true;
+}
+\end{minted}
+\subsection{Fix}
+
     
+\begin{minted}[linenos,breaklines, firstnumber=19, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
+constructor(address p1, address p2) {
+    require(
+        (p1 == address(0) && p2 == address(0)) ||
+            (Taxpayer(p1).getSpouse() == p2 &&
+                Taxpayer(p2).getSpouse() == p1),
+        "A new born is allowed only form init and married couple"
+    );
+    age = 0;
+    isMarried = false;
+    parent1 = p1;
+    parent2 = p2;
+    spouse = (address(0));
+    income = 0;
+    tax_allowance = DEFAULT_ALLOWANCE;
+}
+\end{minted}
 
-\section{Methodology}
-    \lipsum[3]  % Replace with your methodology.
 
-\section{Results}
-    \lipsum[4]  % Replace with your results.
-
-\section{Discussion}
-    \lipsum[5]  % Replace with your discussion.
+\section{Task 2}
+\section{Task 3}
 
 \section{Conclusion}
     \lipsum[6]  % Replace with your conclusion.
