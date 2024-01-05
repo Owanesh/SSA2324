@@ -3,5 +3,6 @@ bin/
 crytic-export/
 report/*
 !report/report.tex
+!report/report.pdf
 !report/mythril.report
 .solcx-lock-0.8.22
