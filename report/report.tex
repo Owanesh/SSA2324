@@ -7,6 +7,7 @@
 \usepackage[skins,minted]{tcolorbox}
 \usepackage{lmodern}
 \usepackage{hyperref}
+\usepackage[left=3.3cm, right=3cm, top=3.3cm, bottom=3cm]{geometry}
 \hyphenation{exam-ple}
 
 \setminted{fontsize=\footnotesize}
@@ -115,8 +116,7 @@ and analog results are available also for
 48.    spouse = address(0)
 \end{minted}
 As part of the security analysis conducted on the provided smart contract, Mythril revealed a number of functions that could have potential vulnerabilities. 
-The full report of this analysis is available in the attached Mythril.report file available on repository 
-(\texttt{\href{https://github.com/Owanesh/SSA2324/blob/main/report/mythril.report}{github.com/owanesh/SSA2324/blob/master/report\linebreak/mythril.report}}). 
+The full report of this analysis is available in the attached Mythril.report file available on repository\footnote{\href{https://github.com/Owanesh/SSA2324/blob/main/report/mythril.report}{github.com/owanesh/SSA2324/blob/master/report/mythril.report}}. 
 The findings highlight several areas of concern, including possible risks related to 
 reentrancy\footnote{Reentrancy vulnerability in smart contracts occurs when external calls can be reentered before completing the initial operation, potentially leading to unintended and malicious behavior.} (line 159 of report). 
 In addition, it should be noted that the synergic integration of Mythril with Echidna provided substantial support in defining the constraints (require) necessary to mitigate the identified vulnerabilities. The combination of these two powerful resources provides a comprehensive overview of contract security.
@@ -129,7 +129,8 @@ At the end of listed enhancement described in this report, the result of Mythril
 \end{minted}
 
 \section{Echidna setup}
-In order to write a full suite of tests, echidna offers two way o write a Tester contract. The first one represented below, is a test with a sort of whitelist on method which are allowed to be called.\footnote{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contract}
+In order to write a full suite of tests, echidna offers two way o write a Tester contract. The first one represented below, is a test with a sort of whitelist on method which are allowed to be called.\footnote{\href{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}{github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}}
+
 Another method is by inheritance
 \begin{minted}[linenos,breaklines, firstnumber=1, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
 // SPDX-License-Identifier: MIT
@@ -174,27 +175,32 @@ function marry(address new_spouse) public {
 Looking at these lines of code, one can immediately see some critical issues that make the contract vulnerable to potential unwanted behavior. This is caused by the absence of some security measures within the code Let us delve into the technical description of some possible vulnerabilities:
  
  \begin{itemize}
+        \small
     \item Ability to marry a nonexistent address (address(0))
     \item Self-Marriage Exploitation:
     \begin{itemize}
-        \item The code lacks a check to ensure the \texttt{new\_spouse} address is different from the caller's address.
+            \small
+        \item The code lacks a check to ensure the \texttt{newSpouse} address is different from the caller's address.
         \item Allows a user to marry themselves, potentially leading to unexpected complications.
     \end{itemize}
 
     \item Overwriting Past Marriages:
     \begin{itemize}
+            \small
         \item No verification for whether the caller is already married before executing a new marriage.
         \item Enables repetitive invocation of the \texttt{marry} function, overwriting past marriages without constraints.
     \end{itemize}
 \end{itemize}
 There are then other useful checks to increase the robustness of the code and avoid :
 \begin{itemize}
+    \small
 \item You cannot marry twice the same address
 \item You cannot marry if your status is already set to \texttt{isMarried=True}
 \item Your spouse address needs to be a valid address
 \end{itemize}
 Finally, some inserted checks are more "logical" such as:
 \begin{itemize}
+    \small
     \item You cannot marry with your parents
     \item You cannot marry if your are under sixteen
     \item Your spouse needs to be not married or divorced by previous marriage
@@ -223,21 +229,89 @@ function marry(address newSpouse) public {
             Taxpayer(address(newSpouse)).getIsMarried() == false) ||
             (Taxpayer(address(newSpouse)).getIsMarried() == true &&
                 Taxpayer(address(newSpouse)).getSpouse() == address(this)),
-        "Your partner should be single or not married with another person"
+        "Your partner should be single or at least not married with another person"
     );
     spouse = newSpouse;
     isMarried = true;
 }
 \end{minted}
+One way to check that all these constraints are valid and do not block the normal behavior of the contract is to use echidna, which will do fuzztesting on our contract. Are published below the written test, and the results obtained with \texttt{original.Taxpayer.sol} and those obtained as a result of the modifications. In this way used approach is similar to TDD\footnote{TDD, a software development method, advocates for test creation preceding code writing.} (mixed with BDD\footnote{BDD is a collaborative software development approach emphasizing natural language specifications and executable tests.}), where the requirements are written in the test, and after that the code is modified to be compatible.
 
+\begin{minted}[linenos,breaklines, firstnumber=65,label=TaxpayerTesting.sol, labelposition=topline, frame=single]{solidity}
+function echidna_simple_marry() public view returns (bool) {
+    bool alpha_to_bravo = alpha.getSpouse() == address(bravo) &&
+        alpha.getSpouse() != address(0);
+    return alpha_to_bravo;
+}
 
+function echidna_both_married() public view returns (bool) {
+    bool alpha_to_bravo = alpha.getSpouse() == address(bravo) &&
+        alpha.getSpouse() != address(0);
+    bool bravo_to_alpha = bravo.getSpouse() == address(alpha) &&
+        bravo.getSpouse() != address(0);
+    return alpha_to_bravo && bravo_to_alpha;
+}
+
+function echidna_divorce() public returns (bool) {
+    bravo.divorce();
+    bool alpha_is_divorced = alpha.getSpouse() == address(0) &&
+        alpha.getIsMarried();
+    bool bravo_is_divorced = bravo.getSpouse() == address(0) &&
+        !bravo.getIsMarried();
+    return alpha_is_divorced && bravo_is_divorced;
+}
+\end{minted} 
+
+\begin{minted}[label=results on original.Taxpayer.sol, labelposition=topline, frame=single]{bash}
+echidna_both_married: failed!   [X]
+Call sequence:
+    marry(0x62d69f6867a0a084c6d313943dc22023bc263691)
+    divorce()
+
+echidna_simple_marry: failed!   [X]
+Call sequence:
+    setSpouse(0xb4c79dab8f259c7aee6e5b2aa729821864227e84)
+    divorce()
+
+echidna_divorce: failed!    [X]
+Call sequence:
+    marry(0x62d69f6867a0a084c6d313943dc22023bc263691)
+    divorce()
+
+Event sequence:
+error Revert 0x
+\end{minted} 
+The execution results from Echidna reveal failures in three distinct scenarios. Echidna finds with fuzzing action, a call-sequence able to break the tests. All finded path include an alteration of \texttt{spouse} variable, via \texttt{setSpouse()} called arbitrary or via \texttt{marry()}. With original code some of those scenario are allowed because there are no control on validity of spouse nor validity on \texttt{setSpouse()} call.
+In order to fix is important to analyze lines 47,48,52 and 53 of Taxpayer.sol, added require() ensure that newSpouse is a valid address, and the caller contract is not already married with another spouse.
+To ensure that a contract should be married only with another contract already deployed on blockhain, the control used is \mintinline{solidity}{address(Taxpayer(address(newSpouse))).code.length > 0}\footnote{\href{https://stackoverflow.com/a/74511610}{stackoverflow.com/a/74511610}}
+\begin{minted}[label=results on Taxpayer.sol, labelposition=topline, frame=single]{bash}
+echidna_both_married: passing
+echidna_simple_marry: passing
+echidna_divorce: passing
+\end{minted} 
+ 
 \section{Married persons can pool their tax allowance as long as the sum of their tax allowances remains the same}
 
 \section{The new government introduced a measure that people aged 65 and over have a higher tax allowance, of 7000}
+To introduce this functionality within the code, it was necessary to modify the \mintinline{solidity}{haveBirthday()} function, granting an extra \texttt{ALLOWANCE\_OAP-DEFAULT\_ALLOWANCE} to the contract when it reaches an age of 65.
+The choice was made to use increment by difference so as not to overwrite potential allowance changes. (In fact, it would otherwise have been possible to transfer all the allowance, getting to 0, and then at age 65 having 7000 again.)
+\begin{minted}[linenos,breaklines, firstnumber=167,label=Taxpayer.sol, labelposition=topline, frame=single]{solidity}
+function haveBirthday() public {
+    age++;
+    if (age == 65 && !getIsMarried()) 
+        taxAllowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added lines
+    else if (age == 65 && getIsMarried()) 
+        this.setTaxAllowance(this.getTaxAllowance()+(ALLOWANCE_OAP - DEFAULT_ALLOWANCE));
+}
+\end{minted} 
+The need to have to distinguish the state in which isMarried is derived from the fact that one of the assumptions of this report, is that certain functions can only be called in certain contexts. And among these is \mintinline{solidity}{setTaxAllowance(uint ta)}, which can only be called via \mintinline{solidity}{transferAllowance(uint change)}, which can by definition only be called if \mintinline{solidity}{isMarried=true}.
+
+The choice to use the set method instead of direct assignment comes from wanting to further control the validity of operations.
 \section{Extra requirements}
 Some extra requirements are added to make the contract more "real".
 For example a constraint added require a contract needs to be created with 2 parents options.
 \begin{itemize}
+    \small
     \item You can have parent1 and 2 as address(0)
     \item You can have parent1 and 2 different than address(0) only if they are married each others.
 \end{itemize}
