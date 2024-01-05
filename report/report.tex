@@ -40,7 +40,7 @@
 \end{abstract}
 
 % Table of Contents
-% \tableofcontents
+\tableofcontents
 
 % Sections
 \section{Introduction to fuzz testing}
@@ -51,7 +51,7 @@ This technique is especially effective in finding vulnerabilities in
 software applications, including smart contracts like in this report.
 
 In the context of smart contracts, other popular tool for 
-fuzz testing is Malticore and Foundry. Echidna is an Haskell program designed 
+fuzz testing is Malticore and Foundry. Echidna is an Haskell\footnote{Haskell is a functional programming language} program designed 
 for fuzzing/property-based testing of Ethereum smart contracts. 
 It uses sophisticated grammar-based fuzzing campaigns based 
 on a contract ABI\footnote{A contract ABI, or Application Binary Interface, in the context of Ethereum, is essentially a specification for how to interact with a contract on the Ethereum blockchain} to falsify user-defined predicates or Solidity assertions.
@@ -138,16 +138,16 @@ pragma solidity ^0.8.22;
 
 import "./Taxpayer.sol";
 
-contract TaxpayerTesting is Taxpayer {
-    uint constant ADULT_AGE = 18;
-    uint constant ADULT_OLD_AGE = 65;
-    Taxpayer alpha;
-    Taxpayer bravo;
-
-    constructor() Taxpayer(address(0), address(0)) {
-        alpha = new Taxpayer(address(0), address(0));
-        bravo = new Taxpayer(address(0), address(0));
-...
+constructor() Taxpayer(address(0), address(0)) {
+    alpha = new Taxpayer(address(0), address(0));
+    bravo = new Taxpayer(address(0), address(0));
+    for (uint i = 0; i < ADULT_AGE; i++) {
+        alpha.haveBirthday();
+        bravo.haveBirthday();
+    }
+    bravo.marry(address(alpha));
+    alpha.marry(address(bravo));
+}
 \end{minted}
 By inheriting from Taxpayer, the testing contract gains access to all the public and external functions of Taxpayer, enabling comprehensive testing without the need for explicit method declarations in TaxpayerTesting. This approach can enhance the efficiency of testing, especially in scenarios where extensive coverage of the target contract's functionality is desired. Additionally, the second method seems to align with a fuzzer-based testing strategy, wherein automatic identification of public methods is crucial for generating diverse inputs during testing, as opposed to relying on a predefined whitelist. The decision to adopt the second method is likely driven by the desire for flexibility, automation, and a more dynamic testing environment.
 \section{If person x is married to person y, then person y should be married to person x}
@@ -291,8 +291,75 @@ echidna_divorce: passing
 \end{minted} 
  
 \section{Married persons can pool their tax allowance as long as the sum of their tax allowances remains the same}
+\begin{minted}[linenos, label=Taxpayer.sol, labelposition=topline, frame=single,firstnumber=55]{solidity}
+function transferAllowance(uint change) public {
+    tax_allowance = tax_allowance - change;
+    Taxpayer sp = Taxpayer(address(spouse));
+    sp.setTaxAllowance(sp.getTaxAllowance()+change);
+}
+\end{minted}
+\begin{minted}[linenos, label=Taxpayer.sol, labelposition=topline, frame=single,firstnumber=110]{solidity}
+function transferAllowance(uint256 change) public {
+    require(
+        change > 0,
+        "Don't waste gas, save the world, use proper change value"
+    );
+    require(taxAllowance >= change, "Insufficient tax allowance");
+    require(
+        getIsMarried() && getSpouse() != address(0),
+        "You have to be married before pooling tax allowance"
+    );
+    taxAllowance -= change;
+    Taxpayer sp = Taxpayer(address(spouse));
+    require(
+        sp.getSpouse() == address(this) && sp.getIsMarried(),
+        "You cannot change allowance of person not married with you"
+    );
+    sp.setTaxAllowance(sp.getTaxAllowance() + change);
+}
+\end{minted}
+\begin{minted}[linenos,firstnumber=71,label=original.Taxpayer.sol,labelposition=topline,frame=single]{solidity}
+function setTaxAllowance(uint ta) public {
+    tax_allowance = ta;
+}
+\end{minted}
 
-\section{The new government introduced a measure that people aged 65 and over have a higher tax allowance, of 7000}
+\begin{minted}[linenos,firstnumber=100,label=Taxpayer.sol,labelposition=topline,frame=single]{solidity}
+function setTaxAllowance(uint256 ta) public {
+    require(
+        ta > 0,
+        "Don't waste gas, save the world, use proper change value"
+    );
+    require(
+        getSpouse() != address(0),
+        "Someone that isn't married with you, tried to change your tax allowance"
+    );
+    require(
+        ta > getTaxAllowance(),
+        "Someone tries to decrease illegally your tax allowance"
+    );
+    Taxpayer spoused = Taxpayer(address(getSpouse()));
+    require(
+        ((getAge() < 65 &&
+            spoused.getAge() < 65 &&
+            ta + spoused.getTaxAllowance() == 2 * DEFAULT_ALLOWANCE) ||
+            (getAge() >= 65 &&
+                spoused.getAge() >= 65 &&
+                ta + spoused.getTaxAllowance() == 2 * ALLOWANCE_OAP) ||
+            (getAge() < 65 &&
+                spoused.getAge() >= 65 &&
+                ta + spoused.getTaxAllowance() ==
+                DEFAULT_ALLOWANCE + ALLOWANCE_OAP) ||
+            (getAge() >= 65 &&
+                spoused.getAge() < 65 &&
+                ta + spoused.getTaxAllowance() ==
+                DEFAULT_ALLOWANCE + ALLOWANCE_OAP)),
+        "Tax pooling violation"
+    );
+    taxAllowance = ta;
+}
+\end{minted}
+\section{People aged 65 and over have a higher tax allowance, of 7000}
 To introduce this functionality within the code, it was necessary to modify the \mintinline{solidity}{haveBirthday()} function, granting an extra \texttt{ALLOWANCE\_OAP-DEFAULT\_ALLOWANCE} to the contract when it reaches an age of 65.
 The choice was made to use increment by difference so as not to overwrite potential allowance changes. (In fact, it would otherwise have been possible to transfer all the allowance, getting to 0, and then at age 65 having 7000 again.)
 \begin{minted}[linenos,breaklines, firstnumber=167,label=Taxpayer.sol, labelposition=topline, frame=single]{solidity}
@@ -307,8 +374,21 @@ function haveBirthday() public {
 The need to have to distinguish the state in which isMarried is derived from the fact that one of the assumptions of this report, is that certain functions can only be called in certain contexts. And among these is \mintinline{solidity}{setTaxAllowance(uint ta)}, which can only be called via \mintinline{solidity}{transferAllowance(uint change)}, which can by definition only be called if \mintinline{solidity}{isMarried=true}.
 
 The choice to use the set method instead of direct assignment comes from wanting to further control the validity of operations.
-\section{Extra requirements}
-Some extra requirements are added to make the contract more "real".
+\section{Extras}
+\subsection{Useful (getter) function}
+Two get functions were added to improve the effectiveness on validation checks. These functions do not alter the state of the contract in fact they are defined with \mintinline{solidity}{view} identifier.
+\begin{minted}[linenos,breaklines, firstnumber=179, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
+function getAge() public view returns (uint256) {
+    return age;
+}
+
+function getIsMarried() public view returns (bool) {
+    return isMarried;
+}
+\end{minted}
+\subsection{Requirements}
+Some conditions have been added to make the code more "real," preventing undesirable behavior. The code provided does not require any of these changes, so they can be removed, but these provide robustness to the code and "logical" continuity.
+\subsubsection{Can born only from addr(0x0) or married couple}
 For example a constraint added require a contract needs to be created with 2 parents options.
 \begin{itemize}
     \small
@@ -317,23 +397,91 @@ For example a constraint added require a contract needs to be created with 2 par
 \end{itemize}
 The choice of second requirements isn't needed, of course in real life you can have a baby out of a marriage, but for this scenario we assume you cannot.
 \begin{minted}[linenos,breaklines, firstnumber=19, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
-    constructor(address p1, address p2) {
-        require(
-            (p1 == address(0) && p2 == address(0)) ||
-                (Taxpayer(p1).getSpouse() == p2 &&
-                    Taxpayer(p2).getSpouse() == p1),
-            "A new born is allowed only form init and married couple"
-        );
-        age = 0;
-        isMarried = false;
-        parent1 = p1;
-        parent2 = p2;
-        spouse = (address(0));
-        income = 0;
-        tax_allowance = DEFAULT_ALLOWANCE;
+constructor(address p1, address p2) {
+    require(
+        (p1 == address(0) && p2 == address(0)) ||
+            (Taxpayer(p1).getSpouse() == p2 &&
+                Taxpayer(p2).getSpouse() == p1),
+        "A new born is allowed only form init and married couple"
+    );
+    age = 0;
+    isMarried = false;
+    parent1 = p1;
+    parent2 = p2;
+    spouse = (address(0));
+    income = 0;
+    tax_allowance = DEFAULT_ALLOWANCE;
+}
+\end{minted}
+This improvement is validated by the following test which operates through the use of a \mintinline{solidity}{try{}catch{}} statement.
+\begin{minted}[linenos,breaklines, firstnumber=87, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
+function echidna_block_spawn_of_orphan() public returns (bool) {
+    try new Taxpayer(address(1), address(2)) returns (Taxpayer) {
+        return false;
+    } catch {
+        return true; // exception was raised
     }
-    \end{minted}
-    
+}
+\end{minted}
+As you can read from the test, the code tries to create a contract with \mintinline{solidity}{address(1)} and \mintinline{solidity}{address(2)} as parent1 and parent2 respectively. But the expected result is that the test fails because of the require on line 21 of Taxpayer.sol. So we catch this event inside the catch{} block.
+Another test, more easy to read is shown below: (Notice: alpha and bravo are married from constructor)
+\begin{minted}[linenos,breaklines, firstnumber=37, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
+function echidna_couple_make_a_baby() public returns (bool) {
+    try new Taxpayer(address(alpha), address(bravo)) {
+        return true; // works successfully
+    } catch {
+        return false; // an exception was raised by contract
+    }
+}
+\end{minted}
+\subsubsection{setSpouse valid only for divorce purpose}
+The one proposed is an assumption that was made to make the code fluid, namely that setSpouse can be called as from the original code, only via the \mintinline{solidity}{divorce()} function. Obviously from the original code no such constraint is present, but the decision to include it forces users not to be able to call a \mintinline{solidity}{setSpouse(address sp)} on themselves with a dummy or invalid address, thus avoiding unwanted behavior.
+\begin{minted}[linenos,breaklines, firstnumber=100, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
+    function setSpouse(address sp) public {
+    require(sp != address(this), "You cannot call setSpouse with yourself");
+    require(
+        (getSpouse() != address(0) && getIsMarried() && sp == address(0)),
+        "You are already married, you can call this function only for divorce purpose now"
+    );
+    spouse = (address(sp));
+}
+\end{minted}
+With the condition placed in the require, three conditions must be validated simultaneously "sp" as an input parameter must be equal to \mintinline{solidity}{addr(0)} the contract executing the \mintinline{solidity}{setSpouse(address sp)}  must be \mintinline{solidity}{isMarried=True} and then its \mintinline{solidity}{getSpouse()} must return an address other than \mintinline{solidity}{addr(0)}
+\subsubsection{Ensure to be married before divorce}
+\subsubsection{Solve tax pooling before divorce}
+
+\begin{minted}[linenos,breaklines, firstnumber=70, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
+function divorce() public {
+    require(
+        getSpouse() != address(0) && getIsMarried(),
+        "You're not already married"
+    );
+    Taxpayer sp = Taxpayer(address(spouse));
+    require(
+        sp.getSpouse() == address(this) && sp.getIsMarried(),
+        "That person isn't married with you"
+    );
+    require(
+        (getTaxAllowance() == DEFAULT_ALLOWANCE && age < 65) ||
+            ((getTaxAllowance() == ALLOWANCE_OAP && age >= 65) &&
+                (sp.getTaxAllowance() == DEFAULT_ALLOWANCE && sp.getAge() < 65)) ||
+            (sp.getTaxAllowance() == ALLOWANCE_OAP && sp.getAge() >= 65),
+        "Before divorcing, fix your tax pool allowance"
+    ); 
+    /**
+        if(getAge()>=65) {setTaxAllowance(ALLOWANCE_OAP);}
+        else {setTaxAllowance(DEFAULT_ALLOWANCE);}
+     */
+    sp.setSpouse(address(0));
+    spouse = address(0);
+    /*
+    sp.divorce(); // instead of sp.setSpouse(address(0));
+    */
+    isMarried = false;
+}
+\end{minted}
+\subsection{Echidna through CI/CD pipeline}
+
 \section{Conclusion}
     \lipsum[6]  % Replace with your conclusion.
 
