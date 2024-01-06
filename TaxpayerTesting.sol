@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import "./Taxpayer.sol"; // Replace with the actual path to your contract
+import "./Taxpayer.sol"; 
 
 contract TaxpayerTesting is Taxpayer {
     uint constant ADULT_AGE = 18;
@@ -35,7 +35,6 @@ contract TaxpayerTesting is Taxpayer {
     }
 
     function echidna_couple_make_a_baby() public returns (bool) {
-        be_adult(bravo);
         try new Taxpayer(address(alpha), address(bravo)) {
             return true;
         } catch {
@@ -131,7 +130,7 @@ contract TaxpayerTesting is Taxpayer {
         }
     }
 
-    function echidna_transferallowance() public returns (bool) {
+    function echidna_transfer_allowance() public returns (bool) {
         alpha.transferAllowance(4000);
         return
             bravo.getTaxAllowance() + alpha.getTaxAllowance() ==
@@ -142,7 +141,7 @@ contract TaxpayerTesting is Taxpayer {
         public
         returns (bool)
     {
-        bravo = be_old(bravo);
+        be_old(bravo);
         be_old(alpha);
         alpha.transferAllowance(2000);
         return
@@ -154,7 +153,7 @@ contract TaxpayerTesting is Taxpayer {
         public
         returns (bool)
     {
-        bravo = be_old(bravo);
+        be_old(bravo);
         alpha.transferAllowance(2000);
         return
             bravo.getTaxAllowance() + alpha.getTaxAllowance() ==
