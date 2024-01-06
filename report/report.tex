@@ -136,18 +136,25 @@ Another method is by inheritance
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import "./Taxpayer.sol";
+import "./Taxpayer.sol"; 
 
-constructor() Taxpayer(address(0), address(0)) {
-    alpha = new Taxpayer(address(0), address(0));
-    bravo = new Taxpayer(address(0), address(0));
-    for (uint i = 0; i < ADULT_AGE; i++) {
-        alpha.haveBirthday();
-        bravo.haveBirthday();
+contract TaxpayerTesting is Taxpayer {
+    uint constant ADULT_AGE = 18;
+    uint constant ADULT_OLD_AGE = 65;
+    Taxpayer alpha;
+    Taxpayer bravo;
+
+    constructor() Taxpayer(address(0), address(0)) {
+        alpha = new Taxpayer(address(0), address(0));
+        bravo = new Taxpayer(address(0), address(0));
+        for (uint i = 0; i < ADULT_AGE; i++) {
+            alpha.haveBirthday();
+            bravo.haveBirthday();
+        }
+        bravo.marry(address(alpha));
+        alpha.marry(address(bravo));
     }
-    bravo.marry(address(alpha));
-    alpha.marry(address(bravo));
-}
+...
 \end{minted}
 By inheriting from Taxpayer, the testing contract gains access to all the public and external functions of Taxpayer, enabling comprehensive testing without the need for explicit method declarations in TaxpayerTesting. This approach can enhance the efficiency of testing, especially in scenarios where extensive coverage of the target contract's functionality is desired. Additionally, the second method seems to align with a fuzzer-based testing strategy, wherein automatic identification of public methods is crucial for generating diverse inputs during testing, as opposed to relying on a predefined whitelist. The decision to adopt the second method is likely driven by the desire for flexibility, automation, and a more dynamic testing environment.
 \section{If person x is married to person y, then person y should be married to person x}
@@ -191,11 +198,11 @@ Looking at these lines of code, one can immediately see some critical issues tha
         \item Enables repetitive invocation of the \texttt{marry} function, overwriting past marriages without constraints.
     \end{itemize}
 \end{itemize}
-There are then other useful checks to increase the robustness of the code and avoid :
+There are then other useful checks to increase the robustness of the code and avoid : 
 \begin{itemize}
     \small
 \item You cannot marry twice the same address
-\item You cannot marry if your status is already set to \texttt{isMarried=True}
+\item You cannot marry if you are already married, then \texttt{getSpouse()$\neq$address(0)}
 \item Your spouse address needs to be a valid address
 \end{itemize}
 Finally, some inserted checks are more "logical" such as:
@@ -291,13 +298,16 @@ echidna_divorce: passing
 \end{minted} 
  
 \section{Married persons can pool their tax allowance as long as the sum of their tax allowances remains the same}
-\begin{minted}[linenos, label=Taxpayer.sol, labelposition=topline, frame=single,firstnumber=55]{solidity}
+The tax pooling, based on the provided code, appears to have several issues. The foremost concern is the ability to invoke the method with a \texttt{change} value higher than the current available \texttt{tax\_allowance}. This would inevitably lead to a runtime error as \texttt{tax\_allowance} is defined as a uint. It is always preferable to prevent runtime errors rather than encountering them during execution.
+To address this potential issue, a condition has been introduced to ensure that the available \texttt{tax\_allowance} is greater than the value of \texttt{change} to be transferred. Additionally, an extra check (\textit{not explicitly requested}) has been implemented to prevent "dummy" operations, ensuring that the input value of \texttt{change} is greater than zero.
+\begin{minted}[linenos, label=original.Taxpayer.sol, labelposition=topline, frame=single,firstnumber=55]{solidity}
 function transferAllowance(uint change) public {
     tax_allowance = tax_allowance - change;
     Taxpayer sp = Taxpayer(address(spouse));
     sp.setTaxAllowance(sp.getTaxAllowance()+change);
 }
 \end{minted}
+Furthermore, the assignment specifies that tax pooling should only be granted to married couples. Hence, the introduction of the require statements in lines 116 and 122. The first ensures that the caller, i.e., the one initiating the transfer, is indeed married. The second checks for the reciprocity constraint, ensuring that the recipient is married to the caller.
 \begin{minted}[linenos, label=Taxpayer.sol, labelposition=topline, frame=single,firstnumber=110]{solidity}
 function transferAllowance(uint256 change) public {
     require(
@@ -318,12 +328,19 @@ function transferAllowance(uint256 change) public {
     sp.setTaxAllowance(sp.getTaxAllowance() + change);
 }
 \end{minted}
+Just as with the \mintinline{solidity}{transferAllowance(uint256 change)}, the original form of the \mintinline{solidity}{setTaxAllowance(uint256 ta)} function appears to have security issues, most notably the ability to assign any arbitrary value without any restrictions.
+
+Before examining the applied modifications, it is essential to consider an assumption made during the project's development: specifically, that \mintinline{solidity}{setTaxAllowance(uint256 ta)} should only be called by one's spouse through the \mintinline{solidity}{transferAllowance(uint256 change)} function. This assumption is crucial for understanding the nature of the various \texttt{require()} statements that have been added.
 \begin{minted}[linenos,firstnumber=71,label=original.Taxpayer.sol,labelposition=topline,frame=single]{solidity}
 function setTaxAllowance(uint ta) public {
     tax_allowance = ta;
 }
 \end{minted}
+With the assumptions established earlier and the previously discussed analysis of requirements for the \texttt{transferAllowance} function, understanding the importance of the initial three \texttt{require()} statements in the Taxpayer.sol code becomes more accessible.
 
+There is then a final \texttt{require()} statement that validates the maximum sum a couple can obtain. Specifically, in the case of a couple where both members are under 65 years old, the sum of their \texttt{taxAllowance} must be equal to \texttt{2 * DEFAULT\_ALLOWANCE}.
+
+Examining the code of \texttt{transferAllowance}, it's noticeable that the \texttt{change} parameter is subtracted first and then added to the spouse's \texttt{taxAllowance}. This approach simplifies the sum check since the \texttt{ta} parameter in \texttt{setTaxAllowance}  is already one of the two addends. The remaining analysis involves the \texttt{getTaxAllowance()}  of the spouse (\textit{which, in the previous step, has already been subtracted by \texttt{change} to exclude the scenario where it is considered twice}).
 \begin{minted}[linenos,firstnumber=100,label=Taxpayer.sol,labelposition=topline,frame=single]{solidity}
 function setTaxAllowance(uint256 ta) public {
     require(
@@ -371,10 +388,22 @@ function haveBirthday() public {
         this.setTaxAllowance(this.getTaxAllowance()+(ALLOWANCE_OAP - DEFAULT_ALLOWANCE));
 }
 \end{minted} 
-The need to have to distinguish the state in which isMarried is derived from the fact that one of the assumptions of this report, is that certain functions can only be called in certain contexts. And among these is \mintinline{solidity}{setTaxAllowance(uint ta)}, which can only be called via \mintinline{solidity}{transferAllowance(uint change)}, which can by definition only be called if \mintinline{solidity}{isMarried=true}.
+The need to have to distinguish the state in which \texttt{isMarried} is derived from the fact that one of the assumptions of this report, is that certain functions can only be called in certain contexts. And among these is \mintinline{solidity}{setTaxAllowance(uint ta)}, which can only be called via \mintinline{solidity}{transferAllowance(uint change)}, which can by definition only be called if \mintinline{solidity}{isMarried=true}.
 
 The choice to use the set method instead of direct assignment comes from wanting to further control the validity of operations.
+Another useful requirement to ensure the required functionality is the one inserted in the \mintinline{solidity}{setTaxAllowance(uint ta)}, where the age of the couple is taken into account, ensuring that the sum of the two can be a maximum of \texttt{2*ALLOWANCE\_OAP} if both are over 65 years old, or \texttt{DEFAULT\_ALLOWANCE + ALLLOWANCE\_OAP} where the couple is of mixed age. (from line 118 of Taxpayer.sol)
 \section{Extras}
+\subsection{Style edits and warning removal}
+In all files within the repository, the \texttt{slither-format}\footnote{\href{https://github.com/crytic/slither/wiki/Slither-format}{github.com/crytic/slither/wiki/Slither-format}} command was run, which provides a patch to align the code with what the guidelines are (example new\_spouse written in camelCase instead of snake\_case).
+
+Two other warnings have been resolved, the first concerns the use of the `view` identifier for those functions that do not change state, typical of getter() methods.
+\begin{minted}[linenos,breaklines, firstnumber=163, label=Taxpayer.sol,labelposition=topline, frame=single, escapeinside=||]{solidity}
+function getTaxAllowance() public |\colorbox{lightgray}{view}| returns (uint256) {
+    return taxAllowance;
+}
+\end{minted}
+The last warning concerns the \texttt{SPDX-License-Identifier}\footnote{The code comment \texttt{// SPDX-License-Identifier:<license>} serves as a standardized declaration of the software's licensing terms, specifying that it is released under the certain License.}, set as a common practice under MIT License that permits users to use, modify, and distribute software freely, requiring only that the original license and copyright notice be included.
+
 \subsection{Useful (getter) function}
 Two get functions were added to improve the effectiveness on validation checks. These functions do not alter the state of the contract in fact they are defined with \mintinline{solidity}{view} identifier.
 \begin{minted}[linenos,breaklines, firstnumber=179, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
@@ -423,8 +452,8 @@ function echidna_block_spawn_of_orphan() public returns (bool) {
     }
 }
 \end{minted}
-As you can read from the test, the code tries to create a contract with \mintinline{solidity}{address(1)} and \mintinline{solidity}{address(2)} as parent1 and parent2 respectively. But the expected result is that the test fails because of the require on line 21 of Taxpayer.sol. So we catch this event inside the catch{} block.
-Another test, more easy to read is shown below: (Notice: alpha and bravo are married from constructor)
+As you can read from the test, the code tries to create a contract with \mintinline{solidity}{address(1)} and \mintinline{solidity}{address(2)} as parent1 and parent2 respectively. But the expected result is that the test fails because of the require on line 21 of Taxpayer.sol. So we handle this event inside the catch\verb|{}| block.
+Another test, more easy to read is shown below: (\textit{Notice: alpha and bravo are married from constructor})
 \begin{minted}[linenos,breaklines, firstnumber=37, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
 function echidna_couple_make_a_baby() public returns (bool) {
     try new Taxpayer(address(alpha), address(bravo)) {
@@ -437,7 +466,7 @@ function echidna_couple_make_a_baby() public returns (bool) {
 \subsubsection{setSpouse valid only for divorce purpose}
 The one proposed is an assumption that was made to make the code fluid, namely that setSpouse can be called as from the original code, only via the \mintinline{solidity}{divorce()} function. Obviously from the original code no such constraint is present, but the decision to include it forces users not to be able to call a \mintinline{solidity}{setSpouse(address sp)} on themselves with a dummy or invalid address, thus avoiding unwanted behavior.
 \begin{minted}[linenos,breaklines, firstnumber=100, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
-    function setSpouse(address sp) public {
+function setSpouse(address sp) public {
     require(sp != address(this), "You cannot call setSpouse with yourself");
     require(
         (getSpouse() != address(0) && getIsMarried() && sp == address(0)),
@@ -447,7 +476,6 @@ The one proposed is an assumption that was made to make the code fluid, namely t
 }
 \end{minted}
 With the condition placed in the require, three conditions must be validated simultaneously "sp" as an input parameter must be equal to \mintinline{solidity}{addr(0)} the contract executing the \mintinline{solidity}{setSpouse(address sp)}  must be \mintinline{solidity}{isMarried=True} and then its \mintinline{solidity}{getSpouse()} must return an address other than \mintinline{solidity}{addr(0)}
-\subsubsection{Ensure to be married before divorce}
 \subsubsection{Solve tax pooling before divorce}
 
 \begin{minted}[linenos,breaklines, firstnumber=70, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
@@ -480,12 +508,12 @@ function divorce() public {
     isMarried = false;
 }
 \end{minted}
+In real life scenario if we have previously taxpooled with our partner and then decide to get divorced, everyone has to take back what they are fiscally entitled to, without being able to access any deductions. That is why a special requirement has been included. The method for bypassing the require has also been written if it is deemed unnecessary and indeed wasteful in terms of transactions (\textit{See annotated code on lines 88 - 89.})
+
+From the snippet shown above another interesting detail also emerges, that the way the code has been provided if Alpha after being married to Bravo, performs a \mintinline{solidity}{divorce()} its \texttt{isMarried} status changes to False, while Bravo's remains at True. The way the various \texttt{require()} were implemented this does not turn out to be a problem since the checks were done based on the \mintinline{solidity}{getSpouse()}, but for better performance, as well as for the \mintinline{solidity}{marry(address newSpouse)} which could be modified to alter the state of both contracts, the same can be done for the divorce by uncommenting the line 94
+\subsubsection{Ensure to be married before divorce}
+As can be seen from the requirement of line 71 of Taxpayer.sol, within the \texttt{divorce()} method, the clause that the divorce caller must necessarily be married has been inserted, and the reciprocity constraint has also been added, i.e., that the person set as the spouse is actually married to the divorce caller (line 76)
 \subsection{Echidna through CI/CD pipeline}
 
-\section{Conclusion}
-    \lipsum[6]  % Replace with your conclusion.
-
-% Bibliography
-\printbibliography
 
 \end{document}
