@@ -30,11 +30,8 @@
 \begin{abstract}
     This report will analyze the security of a provided Taxpayer.sol 
     contract. Security will be analyzed and tested through the use of 
-    the Echidna tool. To make the code more robust throughout the report 
-    only \mintinline{solidity}{require()} functions will be used to 
-    increase backward compatibility. Where there are lines of code with 
-    the exception of \mintinline{solidity}{require()}, this will be 
-    explained by demonstrating its usefulness based on the assumptions made.
+    the Echidna tool. To make the code more robust, throughout the report 
+    only \mintinline{solidity}{require()} functions will be used to increase backward compatibility. Of the various possible ways including adding invariants or directly modifying the code, the use of requires was preferred as they are more versatile.
 
     This report is part of the Security in Software Application course at La Sapienza University of Rome. It is therefore not intended as a scientific research paper, but as a report for laboratory exercise.
 \end{abstract}
@@ -229,7 +226,7 @@ function marry(address newSpouse) public {
     require(newSpouse != address(0), "Invalid spouse address");
     require(
         address(Taxpayer(address(newSpouse))).code.length > 0,
-        "Invalid spouse, is it already born?" //exploitable if new_spouse has another type of contract
+        "Invalid spouse, is it already born?"
     );
     require(
         (Taxpayer(address(newSpouse)).getSpouse() == address(0) &&
@@ -376,6 +373,44 @@ function setTaxAllowance(uint256 ta) public {
     taxAllowance = ta;
 }
 \end{minted}
+\subsection{Testing}
+\begin{minted}[label=TaxpayerTesting.sol, labelposition=topline, frame=single, firstnumber=125]{solidity}
+function echidna_transfer_allowance() public returns (bool) {
+    alpha.transferAllowance(4000);
+    return
+        bravo.getTaxAllowance() + alpha.getTaxAllowance() ==
+        2 * DEFAULT_ALLOWANCE;
+}
+function echidna_transfer_huge_amount_of_allowance() public returns (bool) {
+    try alpha.transferAllowance(40000) {
+        return false;
+    } catch {
+        return true;
+    }
+}
+\end{minted}
+
+\begin{minted}[label=results on original.Taxpayer.sol, labelposition=topline, frame=single]{bash}
+echidna_transfer_allowance: failed! [X]
+    Call sequence:
+        marry(0x62d69f6867a0a084c6d313943dc22023bc263691)
+        transferAllowance(1)
+    
+echidna_transfer_huge_amount_of_allowance: failed! [X]
+    Call sequence:
+        setTaxAllowance(35514)
+        setSpouse(0xb4c79dab8f259c7aee6e5b2aa729821864227e84)
+        transferAllowance(35044)
+\end{minted}
+As shown by the fuzzer results, with the original code there is a path, then a call sequence such that the constraints required by the test, are not met. This is because the original code places no constraints on functions such as \mintinline{solidity}{marry(address sp)}, \texttt{setTaxAllowance} or \texttt{setSpouse}.
+
+Basically, the \texttt{echidna\_transfer\_huge\_amount\_of\_allowance} test shows how it is possible to set an arbitrary value of \texttt{taxAllowance}, after which set a spouse (without going through marry) and after which do a transfer. From the original code this behavior is permissible, but since it is undesirable that is why the requirements with the constraints on marriage and reciprocity were inserted.The \texttt{echidna\_transfer\_allowance} test on the other hand shows how it is possible to do a marry on an address (in this case the fuzzer is using the address of \texttt{alpha}) and then transfer 1, also this behavior from the original code is permissible.This behavior is undesirable since before transferring the \texttt{taxAllowance} we must necessarily check the reciprocity constraint. If fuzzer marries with \texttt{alpha}, and transfers 1, then \texttt{alpha}'s allowance will always be greater than expected, even when \texttt{alpha} decides to join in marriage with \texttt{bravo}. 
+To highlight the effectiveness of the inserted requirements, the result of the usual tests performed instead on Taxpayer.sol is shown below
+\begin{minted}[label=results on Taxpayer.sol, labelposition=topline, frame=single]{bash}
+echidna_transfer_allowance: passing
+echidna_transfer_huge_amount_of_allowance: passing
+\end{minted}
+
 \section{People aged 65 and over have a higher tax allowance, of 7000}
 To introduce this functionality within the code, it was necessary to modify the \mintinline{solidity}{haveBirthday()} function, granting an extra \texttt{ALLOWANCE\_OAP-DEFAULT\_ALLOWANCE} to the contract when it reaches an age of 65.
 The choice was made to use increment by difference so as not to overwrite potential allowance changes. (In fact, it would otherwise have been possible to transfer all the allowance, getting to 0, and then at age 65 having 7000 again.)
@@ -392,6 +427,26 @@ The need to have to distinguish the state in which \texttt{isMarried} is derived
 
 The choice to use the set method instead of direct assignment comes from wanting to further control the validity of operations.
 Another useful requirement to ensure the required functionality is the one inserted in the \mintinline{solidity}{setTaxAllowance(uint ta)}, where the age of the couple is taken into account, ensuring that the sum of the two can be a maximum of \texttt{2*ALLOWANCE\_OAP} if both are over 65 years old, or \texttt{DEFAULT\_ALLOWANCE + ALLLOWANCE\_OAP} where the couple is of mixed age. (from line 118 of Taxpayer.sol)
+
+Below are reported the tests.
+\begin{minted}[breaklines, label=TaxpayerTesting.sol, labelposition=topline, frame=single]{solidity}
+function echidna_allowance_older_than_sixtyfive_for_both() public returns bool) {
+    be_old(bravo);
+    be_old(alpha);
+    alpha.transferAllowance(2000);
+    return bravo.getTaxAllowance() + alpha.getTaxAllowance() == ALLOWANCE_OAP + ALLOWANCE_OAP;
+}
+
+function echidna_allowance_older_than_sixtyfive_for_only_one() public returns (bool) {
+    be_old(bravo);
+    alpha.transferAllowance(2000);
+    return bravo.getTaxAllowance() + alpha.getTaxAllowance() == DEFAULT_ALLOWANCE + ALLOWANCE_OAP;
+}
+\end{minted} 
+\begin{minted}[label=results on Taxpayer.sol, labelposition=topline, frame=single]{bash}
+echidna_allowance_older_than_sixtyfive_for_only_one: passing
+echidna_allowance_older_than_sixtyfive_for_both: passing
+\end{minted}
 \section{Extras}
 \subsection{Style edits and warning removal}
 In all files within the repository, the \texttt{slither-format}\footnote{\href{https://github.com/crytic/slither/wiki/Slither-format}{github.com/crytic/slither/wiki/Slither-format}} command was run, which provides a patch to align the code with what the guidelines are (example new\_spouse written in camelCase instead of snake\_case).
@@ -514,6 +569,8 @@ From the snippet shown above another interesting detail also emerges, that the w
 \subsubsection{Ensure to be married before divorce}
 As can be seen from the requirement of line 71 of Taxpayer.sol, within the \texttt{divorce()} method, the clause that the divorce caller must necessarily be married has been inserted, and the reciprocity constraint has also been added, i.e., that the person set as the spouse is actually married to the divorce caller (line 76)
 \subsection{Echidna through CI/CD pipeline}
+Within the DevSecOps\footnote{DevSecOps (Development Security Operations)  is a collaborative approach that integrates security practices throughout the entire software development process.} framework, where security is integrated from the early stages of the development cycle\footnote{The development cycle refers to the iterative process of software development, encompassing stages such as planning, coding, testing, and deployment.}, incorporating Echidna into the CI/CD\footnote{CI/CD (Continuous Integration/Continuous Deployment) is a software development practice that involves continuous integration of code changes, automated testing, and seamless deployment to production, ensuring a streamlined and efficient development pipeline.} pipeline allows for continuous assessment of contract security. This significantly reduces the risks associated with security vulnerabilities, as issues are detected and addressed before the code reaches the production environment.
 
-
+To ensure effective implementation of Echidna within the CI/CD pipeline, it has been integrated with GitHub Actions\footnote{GitHub Actions are automated workflows within the GitHub platform that allow developers to define, customize, and automate software development workflows.}. This ensures that every code change undergoes automatic analysis by Echidna before release, ensuring that the released code is always secure and free from vulnerabilities. This practice provides an additional assurance of code consistency and integrity, contributing to maintaining a secure and reliable development and release environment.
+The page containing the complete history of triggered GitHub Action implemented\footnote{\href{https://github.com/Owanesh/SSA2324/blob/main/.github/workflows/main.yml}{github.com/Owanesh/SSA2324/blob/main/.github/workflows/main.yml}} is available on GitHub under the [\href{https://github.com/Owanesh/SSA2324/actions}{/actions}] section of our repository .
 \end{document}
