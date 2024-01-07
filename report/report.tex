@@ -75,15 +75,14 @@ the security of smart contracts.
 \section{Other testing tools}
 There are several tools available for conducting security checks on smart contracts, each designed to identify and mitigate potential vulnerabilities that could compromise the integrity and security of blockchain-based applications. Solidity static analyzers such as Myhtil and Slither\footnote{Already included into Echidna stack} are widely used to perform automated scans of smart contract code, flagging potential security issues. 
 \subsection{Mythril}
-Mythril is a powerful open-source security analysis tool specifically designed for Ethereum smart contracts. It performs static and dynamic analysis to detect a wide range of security issues, including potential vulnerabilities such as reentrancy attacks, integer overflows, and more.
+Mythril is a powerful open-source security analysis tool specifically designed for Ethereum smart contracts. It conducts static and dynamic analyses to identify a broad spectrum of security issues, including potential vulnerabilities such as reentrancy attacks, integer overflows, and more.
 
-Mythril supports various installation methods, including pip (Python package manager) and Docker. 
-You can find detailed installation instructions on the official Mythril 
-GitHub repository: \texttt{\href{https://github.com/ConsenSys/mythril}{github.com/ConsenSys/mythril}}. 
-The method chosed in this report is via Docker due to compatibility with python3.12. 
-Below there are execution command and respective output given by tool.
+Mythril supports various installation methods, including pip (Python package manager) and Docker.
+Detailed installation instructions can be found on the official Mythril GitHub repository: \texttt{\href{https://github.com/ConsenSys/mythril}{github.com/ConsenSys/mythril}}.
+The method chosen in this report is via Docker due to compatibility with Python 3.12.
+Below, you will find the execution command and the respective output provided by the tool.
 
-Before we look at what changes are needed to make the contract more secure and robust, let's take a look at what Mythril's report on the contract provided. (currently available as original.Taxpayer.sol)
+Before we delve into the changes needed to enhance the contract's security and robustness, let's review the report that Mythril generated for the provided contract (currently available as original.Taxpayer.sol).
 \begin{minted}{bash}
 $: docker run -v $(pwd):/tmp mythril/myth analyze /tmp/original.Taxpayer.sol
 \end{minted}
@@ -126,7 +125,7 @@ At the end of listed enhancement described in this report, the result of Mythril
 \end{minted}
 
 \section{Echidna setup}
-In order to write a full suite of tests, echidna offers two way o write a Tester contract. The first one represented below, is a test with a sort of whitelist on method which are allowed to be called.\footnote{\href{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}{github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}}
+In order to write a full suite of tests, echidna offers two way of write a Tester contract. The first one represented below, is a test with a sort of whitelist on methods which are allowed to be called.\footnote{\href{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}{github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}}
 
 Another method is by inheritance
 \begin{minted}[linenos,breaklines, firstnumber=1, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
@@ -168,8 +167,13 @@ function marry(address newSpouse) public {
 
 \textit{In this way we achieve the isMarried status on both contract with one transaction.}
 
-The decision to not implement the marriage verification within the marry function could stem from the principle of separation of concerns and the idea that a contract should ideally modify only its own state. In a well-designed system, each contract should be responsible for managing its own data and logic independently
+The decision to not implement the marriage verification within the marry function could stem from the principle of separation of concerns and the idea that a contract should ideally modify only its own state. In a well-designed system, each contract should be responsible for managing its own data and logic independently.
+
+
+
+\break
 \subsection{Analyze the original code}
+\label{sec:original_marry}
 \begin{minted}[linenos, breaklines, firstnumber=40, label=original.Taxpayer.sol, labelposition=topline, frame=single]{solidity}
 function marry(address new_spouse) public {
     spouse = new_spouse;
@@ -239,7 +243,7 @@ function marry(address newSpouse) public {
     isMarried = true;
 }
 \end{minted}
-One way to check that all these constraints are valid and do not block the normal behavior of the contract is to use echidna, which will do fuzztesting on our contract. Are published below the written test, and the results obtained with \texttt{original.Taxpayer.sol} and those obtained as a result of the modifications. In this way used approach is similar to TDD\footnote{TDD, a software development method, advocates for test creation preceding code writing.} (mixed with BDD\footnote{BDD is a collaborative software development approach emphasizing natural language specifications and executable tests.}), where the requirements are written in the test, and after that the code is modified to be compatible.
+One way to check that all these constraints are valid and do not block the normal behavior of the contract is to use echidna, which will do fuzztesting on the contract. Are published below the written test, and the results obtained with \texttt{original.Taxpayer.sol} and those obtained as a result of the modifications. In this way used approach is similar to TDD\footnote{TDD, a software development method, advocates for test creation preceding code writing.} (mixed with BDD\footnote{BDD is a collaborative software development approach emphasizing natural language specifications and executable tests.}), where the requirements are written in the test, and after that the code is modified to be compatible.
 
 \begin{minted}[linenos,breaklines, firstnumber=65,label=TaxpayerTesting.sol, labelposition=topline, frame=single]{solidity}
 function echidna_simple_marry() public view returns (bool) {
@@ -285,9 +289,10 @@ Call sequence:
 Event sequence:
 error Revert 0x
 \end{minted} 
-The execution results from Echidna reveal failures in three distinct scenarios. Echidna finds with fuzzing action, a call-sequence able to break the tests. All finded path include an alteration of \texttt{spouse} variable, via \texttt{setSpouse()} called arbitrary or via \texttt{marry()}. With original code some of those scenario are allowed because there are no control on validity of spouse nor validity on \texttt{setSpouse()} call.
+The execution results from Echidna reveal failures in three distinct scenarios. Echidna finds with fuzzing action, a call-sequence able to break the tests. All found path include an alteration of \texttt{spouse} variable, via \texttt{setSpouse()} called arbitrary or via \texttt{marry()}. With original code some of those scenario are allowed because there are no controls on validity of spouse nor validity on \texttt{setSpouse()} call.
 In order to fix is important to analyze lines 47,48,52 and 53 of Taxpayer.sol, added require() ensure that newSpouse is a valid address, and the caller contract is not already married with another spouse.
-To ensure that a contract should be married only with another contract already deployed on blockhain, the control used is \mintinline{solidity}{address(Taxpayer(address(newSpouse))).code.length > 0}\footnote{\href{https://stackoverflow.com/a/74511610}{stackoverflow.com/a/74511610}}
+To ensure that a contract should be married only with another contract already deployed on blockhain, the control used is \mintinline{solidity}{address(Taxpayer(address(newSpouse))).code.length > 0}\footnote{\href{https://stackoverflow.com/a/74511610}{stackoverflow.com/a/74511610}}.
+A proposed fix on setSpouse also in described on \hyperref[sec:setspouse]{setSpouse()} section.
 \begin{minted}[label=results on Taxpayer.sol, labelposition=topline, frame=single]{bash}
 echidna_both_married: passing
 echidna_simple_marry: passing
@@ -418,7 +423,7 @@ The choice was made to use increment by difference so as not to overwrite potent
 function haveBirthday() public {
     age++;
     if (age == 65 && !getIsMarried()) 
-        taxAllowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE); // added lines
+        taxAllowance += (ALLOWANCE_OAP - DEFAULT_ALLOWANCE);
     else if (age == 65 && getIsMarried()) 
         this.setTaxAllowance(this.getTaxAllowance()+(ALLOWANCE_OAP - DEFAULT_ALLOWANCE));
 }
@@ -448,6 +453,47 @@ echidna_allowance_older_than_sixtyfive_for_only_one: passing
 echidna_allowance_older_than_sixtyfive_for_both: passing
 \end{minted}
 \section{Extras}
+\subsection{Every person has an income tax allowance on which no tax is paid}
+From the provided code, it appears that the value of "income" is initially set to 0 and is not subsequently modified. This is also due to the absence of getter and setter methods. Below is a potential fix, primarily addressing the implementation of these two methods. It is important to note that, in order to secure the setter method, it must include constraints on the rule policy of those who can invoke the function. This is essential to prevent a contract from calling \texttt{setIncome} on itself by temporarily declaring a lower value and then subsequently declaring a higher one. To mitigate this, the use of Role-Based Access Control (RBAC)\footnote{Is a security model that restricts system access to authorized users based on their assigned roles and responsibilities, enhancing access management and reducing potential security risks.} policies is recommended.
+\break
+To implement this specification, assuming the existence of secure getter and setter methods, the code can be structured as follows:
+\begin{minted}[breaklines]{solidity}
+function getIncome() public view returns (uint256) {
+    return income;
+}
+
+// Secure setter method with RBAC control (added onlyAdmin invariant)
+function setIncome(uint256 _newIncome) public onlyAdmin {
+    // useful require() to avoid unexpected behaviour
+    income = _newIncome;
+}
+
+function isTaxableIncome(bool considerCouple) public returns (bool){
+    if(considerCouple){
+        require(getSpouse() != address(0) && getIsMarried(), "You have to be marry to use considerCouple flag");
+        Taxpayer spouse = Taxpayer(address(getSpouse()));
+        return getIncome() + spouse.getIncome() <= getTaxAllowance() + spouse.getTaxAllowance();
+    }else {
+        return getIncome() < getTaxAllowance();
+    }
+}
+
+function getTaxableIncome(bool considerCouple) public returns (uint256){
+    if(!isTaxableIncome(considerCouple)) return getIncome();
+    if(considerCouple){
+        Taxpayer spouse = Taxpayer(address(getSpouse()));
+        return getIncome() - getTaxAllowance() - (spouse.getIncome() + spouse.getTaxAllowance());
+    }
+    else{
+        return getIncome() - getTaxAllowance();
+    }
+}
+
+\end{minted}
+the \texttt{considerCouple} flag is used to allow the user to assess his income even if taxpooling has been done.In the case where \texttt{considerCouple = false}, then the person is considered to be a single individual, even if he is married (\textit{this could be detrimental at the time when a person has transferred all of his taxallowance and then wants to assess the taxability of his income, which will be 100 percent}). In the case where \texttt{considerCouple = true} then the two \texttt{taxAllowances} will be added together, subtracted from the spouse's income, and that value represents the new "taxAllowance" to be used to first assess whether the income is taxable, and if so, by how much.
+
+
+
 \subsection{Style edits and warning removal}
 In all files within the repository, the \texttt{slither-format}\footnote{\href{https://github.com/crytic/slither/wiki/Slither-format}{github.com/crytic/slither/wiki/Slither-format}} command was run, which provides a patch to align the code with what the guidelines are (example new\_spouse written in camelCase instead of snake\_case).
 
@@ -519,6 +565,8 @@ function echidna_couple_make_a_baby() public returns (bool) {
 }
 \end{minted}
 \subsubsection{setSpouse valid only for divorce purpose}
+\label{sec:setspouse}
+The code proposed below helps the understanding of \hyperref[sec:original_marry]{marry() function} explained above.
 The one proposed is an assumption that was made to make the code fluid, namely that setSpouse can be called as from the original code, only via the \mintinline{solidity}{divorce()} function. Obviously from the original code no such constraint is present, but the decision to include it forces users not to be able to call a \mintinline{solidity}{setSpouse(address sp)} on themselves with a dummy or invalid address, thus avoiding unwanted behavior.
 \begin{minted}[linenos,breaklines, firstnumber=100, label=Taxpayer.sol,labelposition=topline, frame=single]{solidity}
 function setSpouse(address sp) public {
@@ -563,7 +611,7 @@ function divorce() public {
     isMarried = false;
 }
 \end{minted}
-In real life scenario if we have previously taxpooled with our partner and then decide to get divorced, everyone has to take back what they are fiscally entitled to, without being able to access any deductions. That is why a special requirement has been included. The method for bypassing the require has also been written if it is deemed unnecessary and indeed wasteful in terms of transactions (\textit{See annotated code on lines 88 - 89.})
+In real life scenario if we have previously taxpooled with the partner and then decide to get divorced, everyone has to take back what they are fiscally entitled to, without being able to access any deductions. That is why a special requirement has been included. The method for bypassing the require has also been written if it is deemed unnecessary and indeed wasteful in terms of transactions (\textit{See annotated code on lines 88 - 89.})
 
 From the snippet shown above another interesting detail also emerges, that the way the code has been provided if Alpha after being married to Bravo, performs a \mintinline{solidity}{divorce()} its \texttt{isMarried} status changes to False, while Bravo's remains at True. The way the various \texttt{require()} were implemented this does not turn out to be a problem since the checks were done based on the \mintinline{solidity}{getSpouse()}, but for better performance, as well as for the \mintinline{solidity}{marry(address newSpouse)} which could be modified to alter the state of both contracts, the same can be done for the divorce by uncommenting the line 94
 \subsubsection{Ensure to be married before divorce}
@@ -572,5 +620,5 @@ As can be seen from the requirement of line 71 of Taxpayer.sol, within the \text
 Within the DevSecOps\footnote{DevSecOps (Development Security Operations)  is a collaborative approach that integrates security practices throughout the entire software development process.} framework, where security is integrated from the early stages of the development cycle\footnote{The development cycle refers to the iterative process of software development, encompassing stages such as planning, coding, testing, and deployment.}, incorporating Echidna into the CI/CD\footnote{CI/CD (Continuous Integration/Continuous Deployment) is a software development practice that involves continuous integration of code changes, automated testing, and seamless deployment to production, ensuring a streamlined and efficient development pipeline.} pipeline allows for continuous assessment of contract security. This significantly reduces the risks associated with security vulnerabilities, as issues are detected and addressed before the code reaches the production environment.
 
 To ensure effective implementation of Echidna within the CI/CD pipeline, it has been integrated with GitHub Actions\footnote{GitHub Actions are automated workflows within the GitHub platform that allow developers to define, customize, and automate software development workflows.}. This ensures that every code change undergoes automatic analysis by Echidna before release, ensuring that the released code is always secure and free from vulnerabilities. This practice provides an additional assurance of code consistency and integrity, contributing to maintaining a secure and reliable development and release environment.
-The page containing the complete history of triggered GitHub Action implemented\footnote{\href{https://github.com/Owanesh/SSA2324/blob/main/.github/workflows/main.yml}{github.com/Owanesh/SSA2324/blob/main/.github/workflows/main.yml}} is available on GitHub under the [\href{https://github.com/Owanesh/SSA2324/actions}{/actions}] section of our repository .
+The page containing the complete history of triggered GitHub Action implemented\footnote{\href{https://github.com/Owanesh/SSA2324/blob/main/.github/workflows/main.yml}{github.com/Owanesh/SSA2324/blob/main/.github/workflows/main.yml}} is available on GitHub under the [\href{https://github.com/Owanesh/SSA2324/actions}{Actions}] section of the repository .
 \end{document}
