@@ -52,7 +52,7 @@ fuzz testing is Malticore and Foundry. Echidna is an Haskell\footnote{Haskell is
 for fuzzing/property-based testing of Ethereum smart contracts. 
 It uses sophisticated grammar-based fuzzing campaigns based 
 on a contract ABI\footnote{A contract ABI, or Application Binary Interface, in the context of Ethereum, is essentially a specification for how to interact with a contract on the Ethereum blockchain} to falsify user-defined predicates or Solidity assertions.
-Instead of other softwares, Echidna includes also other tools like slither.
+Instead of other softwares, Echidna includes also other tools like Slither.
 
 One of the key features of Echidna is its unique 'property-based fuzzing',
  which tries to falsify user-defined invariants (properties) 
@@ -73,7 +73,7 @@ behaviors, we aim to contribute to the broader discussion on improving
 the security of smart contracts.
 
 \section{Other testing tools}
-There are several tools available for conducting security checks on smart contracts, each designed to identify and mitigate potential vulnerabilities that could compromise the integrity and security of blockchain-based applications. Solidity static analyzers such as Myhtil and Slither\footnote{Already included into Echidna stack} are widely used to perform automated scans of smart contract code, flagging potential security issues. 
+There are several tools available for conducting security checks on smart contracts, each designed to identify and mitigate potential vulnerabilities that could compromise the integrity and security of blockchain-based applications. Solidity static analyzers such as Myhtril and Slither\footnote{Already included into Echidna stack} are widely used to perform automated scans of smart contract code, flagging potential security issues. 
 \subsection{Mythril}
 Mythril is a powerful open-source security analysis tool specifically designed for Ethereum smart contracts. It conducts static and dynamic analyses to identify a broad spectrum of security issues, including potential vulnerabilities such as reentrancy attacks, integer overflows, and more.
 
@@ -125,7 +125,7 @@ At the end of listed enhancement described in this report, the result of Mythril
 \end{minted}
 
 \section{Echidna setup}
-In order to write a full suite of tests, echidna offers two way of write a Tester contract. The first one represented below, is a test with a sort of whitelist on methods which are allowed to be called.\footnote{\href{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}{github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}}
+In order to write a full suite of tests, Echidna offers two way of write a Tester contract. The first one represented below, is a test with a sort of whitelist on methods which are allowed to be called.\footnote{\href{https://github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}{github.com/crytic/echidna/wiki/How-to-use-Echidna-with-multiple-contracts}}
 
 Another method is by inheritance
 \begin{minted}[linenos,breaklines, firstnumber=1, label=TaxpayerTesting.sol,labelposition=topline, frame=single]{solidity}
@@ -243,7 +243,7 @@ function marry(address newSpouse) public {
     isMarried = true;
 }
 \end{minted}
-One way to check that all these constraints are valid and do not block the normal behavior of the contract is to use echidna, which will do fuzztesting on the contract. Are published below the written test, and the results obtained with \texttt{original.Taxpayer.sol} and those obtained as a result of the modifications. In this way used approach is similar to TDD\footnote{TDD, a software development method, advocates for test creation preceding code writing.} (mixed with BDD\footnote{BDD is a collaborative software development approach emphasizing natural language specifications and executable tests.}), where the requirements are written in the test, and after that the code is modified to be compatible.
+One way to check that all these constraints are valid and do not block the normal behavior of the contract is to use Echidna, which will do fuzztesting on the contract. Are published below the written test, and the results obtained with \texttt{original.Taxpayer.sol} and those obtained as a result of the modifications. In this way used approach is similar to TDD\footnote{TDD, a software development method, advocates for test creation preceding code writing.} (mixed with BDD\footnote{BDD is a collaborative software development approach emphasizing natural language specifications and executable tests.}), where the requirements are written in the test, and after that the code is modified to be compatible.
 
 \begin{minted}[linenos,breaklines, firstnumber=65,label=TaxpayerTesting.sol, labelposition=topline, frame=single]{solidity}
 function echidna_simple_marry() public view returns (bool) {
